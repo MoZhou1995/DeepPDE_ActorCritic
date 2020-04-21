@@ -91,14 +91,14 @@ class ActorCriticSolver(object):
         print("grad actor computed")
         return grad
 
-    @tf.function
+    #@tf.function
     def train_step_critic(self, train_data):
         print("call train step critic")
         grad = self.grad_critic(train_data, training=True)
         self.optimizer_critic.apply_gradients(zip(grad, self.model_critic.trainable_variables))
         print("train step critic done")
         
-    @tf.function
+    #@tf.function
     def train_step_actor(self, train_data):
         print("call train step actor")
         grad = self.grad_actor(train_data, training=True)
