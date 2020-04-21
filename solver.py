@@ -70,12 +70,13 @@ class ActorCriticSolver(object):
     def grad_critic(self, inputs, training):
         print("call grad critic")
         with tf.GradientTape(persistent=True) as tape:
-            loss = self.loss_critic(inputs, training)
-        print("b_n",self.model_critic.NN_value.bn_layers)
-        print("dense ",self.model_critic.NN_value.dense_layers)
-        variable = [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers]
-        print("variable",variable)
-        grad = tape.gradient(loss, [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers])
+            loss_critic = self.loss_critic(inputs, training)
+        #print("b_n",self.model_critic.NN_value.bn_layers)
+        #print("dense ",self.model_critic.NN_value.dense_layers)
+        #variable = [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers]
+        #print("variable",variable)
+        #grad = tape.gradient(loss_critic, [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers])
+        grad = tape.gradient(loss_critic, self.model_critic.trainable_variables)
         del tape
         print("grad critic computed")
         return grad
@@ -83,8 +84,9 @@ class ActorCriticSolver(object):
     def grad_actor(self, inputs, training):
         print("call grad actor")
         with tf.GradientTape(persistent=True) as tape:
-            loss = self.loss_actor(inputs, training)
-        grad = tape.gradient(loss, [self.model_actor.NN_control.bn_layers,self.model_actor.NN_control.dense_layers])
+            loss_actor = self.loss_actor(inputs, training)
+        #grad = tape.gradient(loss_actor, [self.model_actor.NN_control.bn_layers,self.model_actor.NN_control.dense_layers])
+        grad = tape.gradient(loss_actor, self.model_actor.trainable_variables)
         del tape
         print("grad actor computed")
         return grad
@@ -93,18 +95,18 @@ class ActorCriticSolver(object):
     def train_step_critic(self, train_data):
         print("call train step critic")
         grad = self.grad_critic(train_data, training=True)
-        self.optimizer_critic.apply_gradients(zip(grad, [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers]))
+        self.optimizer_critic.apply_gradients(zip(grad, self.model_critic.trainable_variables))
         print("train step critic done")
         
     @tf.function
     def train_step_actor(self, train_data):
         print("call train step actor")
         grad = self.grad_actor(train_data, training=True)
-        self.optimizer_actor.apply_gradients(zip(grad, [self.model_actor.NN_control.bn_layers,self.model_actor.NN_control.dense_layers]))
-        print("train step critic done")
+        self.optimizer_actor.apply_gradients(zip(grad, self.model_actor.trainable_variables))
+        print("train step actor done")
         
     def control_fcn(self, x):
-        print("call control function")
+        #print("call control function")
         return self.model_actor.NN_control(x, training=True).numpy()
         #return self.sess.run(self.control, feed_dict = {self.x: x})
         
@@ -194,8 +196,8 @@ class DeepNN(tf.keras.Model):
 
     def call(self, x, training):
         """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
-        print("call NN")
-        print(self.AC, "input size", tf.shape(x))
+        #print("call NN")
+        #print(self.AC, "input size", tf.shape(x))
         x = self.bn_layers[0](x, training)
         for i in range(len(self.dense_layers) - 1):
             x = self.dense_layers[i](x)
@@ -203,5 +205,5 @@ class DeepNN(tf.keras.Model):
             x = tf.nn.relu(x)
         x = self.dense_layers[-1](x)
         x = self.bn_layers[-1](x, training)
-        print("output size", tf.shape(x))
+        #print("output size", tf.shape(x))
         return x

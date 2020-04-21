@@ -59,7 +59,7 @@ class LQR(Equation):
             x0 = np.concatenate([x0, x_sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
-        print("sample initialization finished")        
+        #print("sample initialization finished")        
         coef = np.ones([num_sample, self.num_time_interval])
         dw_sample = normal.rvs(size=[num_sample,
                                      self.dim,
@@ -68,9 +68,9 @@ class LQR(Equation):
         x_sample[:, :, 0] = x0
         # flag is used to denote stopping time
         flag = np.ones([num_sample]) #1 for in, 0 for out
-        print("sample start propagation")
+        #print("sample start propagation")
         for i in range(self.num_time_interval):
-            print("sample time step", i)
+            #print("sample time step", i)
             delta_x = self.beta * control_fcn(x_sample[:, :, i])\
                 * self.delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_sample[:, :, i] + delta_x
@@ -85,26 +85,26 @@ class LQR(Equation):
         return dw_sample, x_sample, coef
 
     def w_tf(self, x, u):
-        print("call w_tf")
+        #print("call w_tf")
         return tf.reduce_sum(self.p*tf.square(x) + self.q * tf.square(u) - 2*self.sqrtpqoverbeta
                              , 1, keepdims=True)
 
     def Z_tf(self, x):
-        print("call Z_tf")
+        #print("call Z_tf")
         return 0 * tf.reduce_sum(x, 1, keepdims=False) + self.sqrtpqoverbeta * (self.R ** 2)
 
     def b_tf(self, x):
-        print("call b_tf")
+        #print("call b_tf")
         return tf.reduce_sum(tf.square(x), 1, keepdims=True) - (self.R ** 2)
     
     def b_np(self, x):
-        print("call b_np")
+        #print("call b_np")
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x):
-        print("call V_true")
+        #print("call V_true")
         return tf.reduce_sum(tf.square(x), 1, keepdims=True) * self.sqrtpqoverbeta
 
     def u_true(self, x):
-        print("call u_true")
+        #print("call u_true")
         return -np.sqrt(self.p / self.q) * x
