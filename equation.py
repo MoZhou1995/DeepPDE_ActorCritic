@@ -59,37 +59,30 @@ class LQR(Equation):
             x0 = np.concatenate([x0, x_sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
-        print("sample initialization finished")
-        x_tau = np.zeros([num_sample, self.dim])        
-        tau = self.total_time * np.ones(num_sample)
-        # ExitIndex=i means X_i is in Omega but X_{i+1} is not
-        ExitIndex = np.ones(num_sample) * self.num_time_interval
+        print("sample initialization finished")        
+        coef = np.ones([num_sample, self.num_time_interval])
         dw_sample = normal.rvs(size=[num_sample,
                                      self.dim,
                                      self.num_time_interval]) * self.sqrt_delta_t
         x_sample = np.zeros([num_sample, self.dim, self.num_time_interval + 1])
         x_sample[:, :, 0] = x0
+        # flag is used to denote stopping time
+        flag = np.ones([num_sample]) #1 for in, 0 for out
         print("sample start propagation")
         for i in range(self.num_time_interval):
             print("sample time step", i)
-            x_sample[:, :, i + 1] = x_sample[:, :, i] + self.beta * control_fcn(x_sample[:, :, i]) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            Exit = self.b_np(x_sample[:, :, i + 1])
-            # using loop currently, to be improved later
-            for j in range(num_sample):
-                print("sample index", j)
-                if Exit[j] >= 0 and ExitIndex[j] == self.num_time_interval:
-                    print("sample find exit")
-                    ExitIndex[j] = i
-                    delta_x = np.sqrt(np.sum((x_sample[j, :, i + 1]-x_sample[j, :, i])**2))
-                    mu = (self.R - np.sqrt(np.sum(x_sample[j, :, i]**2)) ) / delta_x
-                    tau[j] = (i + mu) * self.delta_t
-                    x_tau[j,:] = (1-mu) * x_sample[j, :, i] + mu * x_sample[j, :, i+1]
-        print("sample assigning x_tau in Omega")
-        for j in range(num_sample):
-            if ExitIndex[j] == self.num_time_interval:
-                x_tau[j,:] = x_sample[j, :, self.num_time_interval]
+            delta_x = self.beta * control_fcn(x_sample[:, :, i])\
+                * self.delta_t + self.sigma * dw_sample[:, :, i]
+            x_iPlus1_temp = x_sample[:, :, i] + delta_x
+            Exit = self.b_np(x_iPlus1_temp) #Exit>=0 means out
+            Exit = np.reshape(np.ceil((np.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
+            coef[:,i] = flag * (coef[:,i] - Exit * \
+                                (self.R - np.sqrt(np.sum(np.square(x_sample[:, :, i]),1,keepdims=False)))\
+                                    / np.sqrt(np.sum(np.square(delta_x),1,keepdims=False)))
+            x_sample[:, :, i + 1] = x_sample[:, :, i] + delta_x * np.reshape(coef[:,i], [num_sample,1])
+            flag = flag - Exit
         print("sample finish")
-        return dw_sample, x_sample, x_tau, tau, ExitIndex
+        return dw_sample, x_sample, coef
 
     def w_tf(self, x, u):
         print("call w_tf")
