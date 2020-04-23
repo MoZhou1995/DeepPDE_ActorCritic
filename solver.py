@@ -9,7 +9,6 @@ DELTA_CLIP = 50.0
 class ActorCriticSolver(object):
     """The fully connected neural network model."""
     def __init__(self, config, bsde):
-        print("define AC solver")
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
@@ -22,18 +21,13 @@ class ActorCriticSolver(object):
         self.optimizer_critic = tf.keras.optimizers.Adam(learning_rate=lr_schedule_critic, epsilon=1e-8)
         self.optimizer_actor = tf.keras.optimizers.Adam(learning_rate=lr_schedule_actor, epsilon=1e-8)
         self.x = None
-        print("finish AC solver initialization")
-        #self.control = None
         
     def train(self):
-        print("start training")
         start_time = time.time()
         training_history = []
         valid_data = self.bsde.sample(self.net_config.valid_size, control_fcn=self.control_fcn)
-
         # begin sgd iteration
         for step in range(self.net_config.num_iterations+1):
-            print("train step", step)
             if step % self.net_config.logging_frequency == 0:
                 loss_critic = self.loss_critic(valid_data, training=False).numpy()
                 loss_actor = self.loss_actor(valid_data, training=False).numpy()
@@ -49,129 +43,99 @@ class ActorCriticSolver(object):
         return np.array(training_history)
 
     def loss_critic(self, inputs, training):
-        print("call loss critic")
-        #dw, x, coef= inputs
+        # this delta is already squared
         delta = self.model_critic(inputs, self.model_actor, training)
         # use linear approximation outside the clipped range
-        loss = tf.reduce_mean(tf.where(tf.abs(delta) < DELTA_CLIP, tf.square(delta),
-                                       2 * DELTA_CLIP * tf.abs(delta) - DELTA_CLIP ** 2))
-        print("loss critic computed")
+        loss = tf.reduce_mean(tf.where(tf.sqrt(delta) < DELTA_CLIP, delta,
+                                       tf.square(2 * DELTA_CLIP * tf.sqrt(delta) - DELTA_CLIP ** 2)))
         return loss
     
     def loss_actor(self, inputs, training):
-        print("call loss actor")
-        #dw, x, coef= inputs
         y = self.model_actor(inputs, self.model_critic, training)
-        # use linear approximation outside the clipped range
         loss = tf.reduce_mean(y)
-        print("loss actor computed")
         return loss
 
     def grad_critic(self, inputs, training):
-        print("call grad critic")
         with tf.GradientTape(persistent=True) as tape:
             loss_critic = self.loss_critic(inputs, training)
-        #print("b_n",self.model_critic.NN_value.bn_layers)
-        #print("dense ",self.model_critic.NN_value.dense_layers)
-        #variable = [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers]
-        #print("variable",variable)
-        #grad = tape.gradient(loss_critic, [self.model_critic.NN_value.bn_layers,self.model_critic.NN_value.dense_layers])
         grad = tape.gradient(loss_critic, self.model_critic.trainable_variables)
         del tape
-        print("grad critic computed")
         return grad
     
     def grad_actor(self, inputs, training):
-        print("call grad actor")
         with tf.GradientTape(persistent=True) as tape:
             loss_actor = self.loss_actor(inputs, training)
-        #grad = tape.gradient(loss_actor, [self.model_actor.NN_control.bn_layers,self.model_actor.NN_control.dense_layers])
         grad = tape.gradient(loss_actor, self.model_actor.trainable_variables)
         del tape
-        print("grad actor computed")
         return grad
 
-    #@tf.function
+    @tf.function
     def train_step_critic(self, train_data):
-        print("call train step critic")
         grad = self.grad_critic(train_data, training=True)
         self.optimizer_critic.apply_gradients(zip(grad, self.model_critic.trainable_variables))
-        print("train step critic done")
         
-    #@tf.function
+    @tf.function
     def train_step_actor(self, train_data):
-        print("call train step actor")
         grad = self.grad_actor(train_data, training=True)
         self.optimizer_actor.apply_gradients(zip(grad, self.model_actor.trainable_variables))
-        print("train step actor done")
         
     def control_fcn(self, x):
-        #print("call control function")
-        return self.model_actor.NN_control(x, training=True).numpy()
-        #return self.sess.run(self.control, feed_dict = {self.x: x})
+        return self.model_actor.NN_control(x, training=False).numpy()
         
     def err_value(self, inputs):
-        print("call value error")
-        dw, x, coef= inputs
+        dw, x, coef, x_bdry= inputs
         x0 = x[:,:,0]
-        return tf.reduce_mean(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False)))
-         
+        error_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False)))
+        norm = tf.reduce_sum(tf.square(self.bsde.V_true(x0)))
+        return tf.sqrt(error_value - norm)
+    
     def err_control(self, inputs):
-        print("call control error")
-        dw, x, coef= inputs
+        dw, x, coef, x_bdry = inputs
         x0 = x[:,:,0]
-        return tf.reduce_mean(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False)))
+        error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False)))
+        norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
+        return tf.sqrt(error_control / norm)
         
 class CriticModel(tf.keras.Model):
     def __init__(self, config, bsde):
         super(CriticModel, self).__init__()
-        print("build critic model")
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
         self.NN_value = DeepNN(config, "critic")
-        self.y_init = tf.Variable(np.random.uniform(low=0,high=1,size=[1]))
-
+        
     def call(self, inputs, model_actor, training):
-        print("call critic model")
-        dw, x, coef= inputs
+        dw, x, coef, x_bdry = inputs
         num_sample = np.shape(dw)[0]
-        y = tf.Variable(initial_value=np.zeros([num_sample,1]), trainable=False, shape=[num_sample,1],dtype=self.net_config.dtype)
-        #y = np.zeros([num_sample,1])
+        y = 0
         for t in range(self.bsde.num_time_interval):
             y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training))
-        delta = self.NN_value(x[:,:,0]) - y - self.NN_value(x[:,:,-1])
-        print("critic model computed")
-        return delta
-
+        delta = self.NN_value(x[:,:,0], training) - y - self.NN_value(x[:,:,-1], training)
+        delta_bdry = self.NN_value(x_bdry, training) - self.bsde.Z_tf(x_bdry)
+        return tf.square(delta) + tf.square(delta_bdry)
 
 class ActorModel(tf.keras.Model):
     def __init__(self, config, bsde):
         super(ActorModel, self).__init__()
-        print("build actor model")
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
         self.NN_control = DeepNN(config, "actor")
 
     def call(self, inputs, model_critic, training):
-        print("call actor model")
-        dw, x, coef= inputs
+        dw, x, coef, x_bdry = inputs
         num_sample = np.shape(dw)[0]
-        y = tf.Variable(initial_value=np.zeros([num_sample,1]), trainable=False, shape=[num_sample,1],dtype=self.net_config.dtype)
-        #y = np.zeros([num_sample])
+        y = 0
         for t in range(self.bsde.num_time_interval):
             y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training))
-        y = y + model_critic.NN_value(x[:,:,-1])
-        print("actor model computed")
+        y = y + model_critic.NN_value(x[:,:,-1], training)
         return y
 
 
 class DeepNN(tf.keras.Model):
     def __init__(self, config, AC):
         super(DeepNN, self).__init__()
-        print("define NN")
-        self.AC = AC
+        #self.AC = AC
         dim = config.eqn_config.dim
         if AC == "critic":
             num_hiddens = config.net_config.num_hiddens_critic
@@ -196,8 +160,6 @@ class DeepNN(tf.keras.Model):
 
     def call(self, x, training):
         """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
-        #print("call NN")
-        #print(self.AC, "input size", tf.shape(x))
         x = self.bn_layers[0](x, training)
         for i in range(len(self.dense_layers) - 1):
             x = self.dense_layers[i](x)
@@ -205,5 +167,4 @@ class DeepNN(tf.keras.Model):
             x = tf.nn.relu(x)
         x = self.dense_layers[-1](x)
         x = self.bn_layers[-1](x, training)
-        #print("output size", tf.shape(x))
         return x
