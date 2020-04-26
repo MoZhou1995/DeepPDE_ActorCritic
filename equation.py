@@ -49,7 +49,7 @@ class LQR(Equation):
         self.sqrtpqoverbeta = np.sqrt(self.p * self.q) / self.beta
         
     def sample(self, num_sample, control_fcn):
-        # uniformly sample x0 in a ball, rejection sampling, to be improved later
+        # uniformly sample x0 in a ball, rejection sampling, maybe to be improved later
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
             x_sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
@@ -71,19 +71,26 @@ class LQR(Equation):
             x_iPlus1_temp = x_sample[:, :, i] + delta_x
             Exit = self.b_np(x_iPlus1_temp) #Exit>=0 means out
             Exit = np.reshape(np.ceil((np.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
-            coef[:,i] = flag * (coef[:,i] - Exit * \
-                                (np.sqrt(np.sum(np.square(x_iPlus1_temp),1,keepdims=False)) - self.R)\
-                                    / np.sqrt(np.sum(np.square(delta_x),1,keepdims=False)))
+            coef[:,i] = flag * coef[:,i]
+            # the following is to compute x_tau and corresponding coefficients
+            index_out = np.where(flag + Exit == 2)[0] # flag=Exit=1, out at this step
+            dx_out = delta_x[index_out,:] #1*49*dim
+            dx_out_sqrnorm = np.sum(dx_out ** 2, 1, keepdims=False)
+            x_i_out = x_sample[index_out, :, i]
+            inner_product = np.sum(dx_out * x_i_out, 1, keepdims=False)
+            discriminant = inner_product ** 2 - dx_out_sqrnorm * (np.sum(x_i_out**2,1,keepdims=False)- self.R ** 2)
+            coef[index_out,i] = (np.sqrt(discriminant) - inner_product) / dx_out_sqrnorm
             x_sample[:, :, i + 1] = x_sample[:, :, i] + delta_x * np.reshape(coef[:,i], [num_sample,1])
             flag = flag * (1 - Exit)
         #sample on the boundary
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = x_bdry / norm
+        #print("sample coef", coef)
         return dw_sample, x_sample, coef, x_bdry
 
     def w_tf(self, x, u): #num_sample * 1
-        return tf.reduce_sum(self.p*tf.square(x) + self.q * tf.square(u) - 2*self.sqrtpqoverbeta, 1, keepdims=True)
+        return tf.reduce_sum(self.p * tf.square(x) + self.q * tf.square(u) - 2*self.sqrtpqoverbeta, 1, keepdims=True)
 
     def Z_tf(self, x): #num_sample * 1
         return 0 * tf.reduce_sum(x, 1, keepdims=True) + self.sqrtpqoverbeta * (self.R ** 2)

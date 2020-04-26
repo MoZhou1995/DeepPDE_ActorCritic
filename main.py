@@ -13,6 +13,7 @@ from absl import flags
 from absl import logging as absl_logging
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 import equation as eqn
 from solver import ActorCriticSolver
@@ -47,18 +48,16 @@ def main(argv):
 
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
     ActorCritic_solver = ActorCriticSolver(config, bsde)
-    training_history = ActorCritic_solver.train()
-    # if bsde.y_init:
-    #     logging.info('Y0_true: %.4e' % bsde.y_init)
-    #     logging.info('relative error of Y0: %s',
-    #                  '{:.2%}'.format(abs(bsde.y_init - training_history[-1, 2])/bsde.y_init))
+    training_history,x,y = ActorCritic_solver.train()
+    r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
+    #print(x,y)
+    plt.plot(r,y,'ro')
     np.savetxt('{}_training_history.csv'.format(path_prefix),
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
                header='step, loss_critic, loss_actor, err_value, err_control, elapsed_time',
                comments='')
-
 
 if __name__ == '__main__':
     app.run(main)
