@@ -119,7 +119,11 @@ class CriticModel(tf.keras.Model):
         y = 0
         for t in range(self.bsde.num_time_interval):
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True))
+            # y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
+            #     - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True))
+            _, grad = self.NN_value(x[:,:,t], training, need_grad=True)
+            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
+                - self.bsde.sigma * tf.reduce_sum(grad * dw[:,:,t], 1, keepdims=True))
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training, need_grad=False)) * self.bsde.delta_t
             #print("model critic", y)
         delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
@@ -156,7 +160,7 @@ class ActorModel(tf.keras.Model):
 class DeepNN(tf.keras.Model):
     def __init__(self, config, AC):
         super(DeepNN, self).__init__()
-        #self.AC = AC
+        self.AC = AC
         dim = config.eqn_config.dim
         if AC == "critic":
             num_hiddens = config.net_config.num_hiddens_critic
@@ -181,11 +185,17 @@ class DeepNN(tf.keras.Model):
 
     def call(self, x, training, need_grad):
         """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
-        x = self.bn_layers[0](x, training)
-        for i in range(len(self.dense_layers) - 1):
-            x = self.dense_layers[i](x)
-            x = self.bn_layers[i+1](x, training)
-            x = tf.nn.relu(x)
-        x = self.dense_layers[-1](x)
-        x = self.bn_layers[-1](x, training)
-        return x
+        with tf.GradientTape() as g:
+            if self.AC == "critic" and need_grad:
+                g.watch(x)
+            y = self.bn_layers[0](x, training)
+            for i in range(len(self.dense_layers) - 1):
+                y = self.dense_layers[i](y)
+                y = self.bn_layers[i+1](y, training)
+                y = tf.nn.relu(y)
+            y = self.dense_layers[-1](y)
+            y = self.bn_layers[-1](y, training)
+        if self.AC == "critic" and need_grad:
+            return y, g.gradient(y, x)
+        else:
+            return y
