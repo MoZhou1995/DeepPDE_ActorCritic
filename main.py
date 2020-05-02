@@ -48,10 +48,16 @@ def main(argv):
 
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
     ActorCritic_solver = ActorCriticSolver(config, bsde)
-    training_history,x,y = ActorCritic_solver.train()
+    training_history,x,y,u = ActorCritic_solver.train()
     r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
+    u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
     #print(x,y)
-    plt.plot(r,y,'ro')
+    f1 = plt.figure()
+    f2 = plt.figure()
+    ax1 = f1.add_subplot(111)
+    ax1.plot(r,y,'ro')
+    ax2 = f2.add_subplot(111)
+    ax2.plot(r,u_norm,'ro')
     np.savetxt('{}_training_history.csv'.format(path_prefix),
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
