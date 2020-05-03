@@ -89,7 +89,7 @@ class ActorCriticSolver(object):
         
     def control_fcn(self, x):
         #return self.bsde.u_true(x)
-        return self.bsde.u_true(x) * self.model_actor.lmbd.numpy()
+        return self.bsde.u_true(x) * self.model_actor.lmbd#.numpy()
         #return self.model_actor.NN_control(x, training=True, need_grad=False).numpy()
         
     def err_value(self, inputs):
