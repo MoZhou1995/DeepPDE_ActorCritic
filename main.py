@@ -50,14 +50,20 @@ def main(argv):
     ActorCritic_solver = ActorCriticSolver(config, bsde)
     training_history,x,y,u = ActorCritic_solver.train()
     r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
+    theta = np.arctan(x[:,1]/x[:,0])
+    theta2 = np.arctan(u[:,1]/u[:,0])
     u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
     #print(x,y)
     f1 = plt.figure()
     f2 = plt.figure()
+    f3 = plt.figure()
     ax1 = f1.add_subplot(111)
     ax1.plot(r,y,'ro')
     ax2 = f2.add_subplot(111)
     ax2.plot(r,u_norm,'ro')
+    ax3 = f3.add_subplot(111)
+    ax3.plot(theta,theta2,'ro')
+    #print(np.sign(x[:,0]/u[:,0]))
     np.savetxt('{}_training_history.csv'.format(path_prefix),
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],

@@ -25,13 +25,15 @@ class ActorCriticSolver(object):
     def train(self):
         start_time = time.time()
         training_history = []
-        valid_data = self.bsde.sample(self.net_config.valid_size, control_fcn=self.control_fcn)
+        valid_data = self.bsde.sample_tf(self.net_config.valid_size)
+        #valid_data = self.bsde.sample(self.net_config.valid_size, control_fcn=self.control_fcn)
         # begin sgd iteration
         for step in range(self.net_config.num_iterations+1):
             if step == self.net_config.num_iterations:
-                dw, x, coef, x_bdry = valid_data
-                y = self.model_critic.NN_value(x[:,:,0], training=False, need_grad=False)
-                z = self.model_actor.NN_control(x[:,:,0], training=False, need_grad=False)
+                x0, dw_sample, x_bdry = valid_data
+                #dw, x, coef, x_bdry = valid_data
+                y = self.model_critic.NN_value(x0, training=False, need_grad=False)
+                z = self.model_actor.NN_control(x0, training=False, need_grad=False)
             if step % self.net_config.logging_frequency == 0:
                 loss_critic = self.loss_critic(valid_data, training=False).numpy()
                 loss_actor = self.loss_actor(valid_data, training=False).numpy()
@@ -43,8 +45,10 @@ class ActorCriticSolver(object):
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
                         step, loss_critic, loss_actor, err_value, err_control, elapsed_time))
             #self.train_step_critic(self.bsde.sample(self.net_config.batch_size, control_fcn=self.control_fcn))
-            self.train_step_actor(self.bsde.sample(self.net_config.batch_size, control_fcn=self.control_fcn))
-        return np.array(training_history), x[:,:,0], y.numpy(), z.numpy()
+            #self.train_step_actor(self.bsde.sample(self.net_config.batch_size, control_fcn=self.control_fcn))
+            #self.train_step_critic(self.bsde.sample_tf(self.net_config.batch_size))
+            self.train_step_actor(self.bsde.sample_tf(self.net_config.batch_size))
+        return np.array(training_history), x0, y.numpy(), z.numpy()
 
     def loss_critic(self, inputs, training):
         # this delta is already squared
@@ -89,23 +93,21 @@ class ActorCriticSolver(object):
         
     def control_fcn(self, x):
         #return self.bsde.u_true(x)
-        return self.bsde.u_true(x) * self.model_actor.lmbd#.numpy()
-        #return self.model_actor.NN_control(x, training=True, need_grad=False).numpy()
+        #return self.bsde.u_true(x) * self.model_actor.lmbd#.numpy()
+        return self.model_actor.NN_control(x, training=True, need_grad=False)
         
     def err_value(self, inputs):
-        dw, x, coef, x_bdry= inputs
-        x0 = x[:,:,0]
+        x0, dw, x_bdry = inputs
         error_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.V_true(x0)))
         return tf.sqrt(error_value / norm)
     
     def err_control(self, inputs):
-        #dw, x, coef, x_bdry = inputs
-        #x0 = x[:,:,0]
-        #error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
-        #norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
-        #return tf.sqrt(error_control / norm)
-        return 1 - self.model_actor.lmbd
+        x0, dw, x_bdry = inputs
+        error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
+        norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
+        return tf.sqrt(error_control / norm)
+        #return 1 - self.model_actor.lmbd
         
 class CriticModel(tf.keras.Model):
     def __init__(self, config, bsde):
@@ -117,13 +119,15 @@ class CriticModel(tf.keras.Model):
         self.NN_value_grad = DeepNN(config, "actor")
         
     def call(self, inputs, model_actor, training):
-        dw, x, coef, x_bdry = inputs
+        #print("call critic model")
+        x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         y = 0
+        x, coef = self.bsde.propagate_tf(num_sample, x0, dw, model_actor.NN_control, training)
         for t in range(self.bsde.num_time_interval):
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-                 - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True))
+            #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
+            #     - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True))
             #_, grad = self.NN_value(x[:,:,t], training, need_grad=True)
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
             #    - self.bsde.sigma * tf.reduce_sum(grad * dw[:,:,t], 1, keepdims=True))
@@ -146,16 +150,18 @@ class ActorModel(tf.keras.Model):
         self.net_config = config.net_config
         self.bsde = bsde
         self.NN_control = DeepNN(config, "actor")
-        self.lmbd = tf.Variable(initial_value=0.5, trainable=True, dtype='float64')
+        #self.lmbd = tf.Variable(initial_value=0.5, trainable=True, dtype='float64')
 
     def call(self, inputs, model_critic, training):
-        dw, x, coef, x_bdry = inputs
+        #print("call actor model")
+        x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         y = 0
+        x, coef = self.bsde.propagate_tf(num_sample, x0, dw, self.NN_control, training)
         for t in range(self.bsde.num_time_interval):
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.lmbd * self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-            #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * self.bsde.delta_t
+            #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.lmbd * self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
+            y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * self.bsde.delta_t
             #print("model actor", y)
         #y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False)
         y = y + self.bsde.V_true(x[:,:,-1])
