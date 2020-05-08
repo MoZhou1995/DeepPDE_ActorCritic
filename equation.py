@@ -50,6 +50,7 @@ class LQR(Equation):
         self.sqrtpqoverbeta = np.sqrt(self.p * self.q) / self.beta
         
     def sample_tf(self, num_sample):
+        #x0 = np.zeros(shape=[num_sample, self.dim])# + [0.7, 0.1]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
             x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
@@ -65,8 +66,8 @@ class LQR(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
-        #print("call propagate_tf")
+    #def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
+    def propagate_tf(self, num_sample, x0, dw_sample, lmbd, training):
         #x_sample = np.zeros([num_sample, self.dim, self.num_time_interval + 1])
         #x_sample[:, :, 0] = x0
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -76,8 +77,9 @@ class LQR(Equation):
         for i in range(self.num_time_interval):
             #delta_x = self.beta * NN_control(x_sample[:, :, i], training, need_grad=False)\
             #    * self.delta_t + self.sigma * dw_sample[:, :, i]
-            delta_x = self.beta * NN_control(x_i, training, need_grad=False)\
-                * self.delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = self.beta * NN_control(x_i, training, need_grad=False)\
+            #    * self.delta_t + self.sigma * dw_sample[:, :, i]
+            delta_x = self.beta * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
             #x_iPlus1_temp = x_sample[:, :, i] + delta_x
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
