@@ -47,32 +47,32 @@ def main(argv):
     absl_logging.set_verbosity('info')
 
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
-    num = 100
-    for lmbd in [0.6, 0.8, 0.9, 1.0, 1.1, 1.2, 1.4]:
+    num = 1
+    for lmbd in [1.0]:
         loss_act=np.zeros([num])
         for index in range(num):
             #ActorCritic_solver = ActorCriticSolver(config, bsde)
             ActorCritic_solver = ActorCriticSolver(config, bsde, lmbd)
             training_history,x,y,u,loss_actor = ActorCritic_solver.train()
             loss_act[index] = loss_actor
-        print("lmbd", lmbd, "loss_actor", np.mean(loss_act))
-    # r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
-    # theta = np.arctan(x[:,1]/x[:,0])
-    # theta2 = np.arctan(u[:,1]/u[:,0])
-    # u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
+        #print("lmbd", lmbd, "loss_actor", np.mean(loss_act))
+    r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
+    theta = np.arctan(x[:,1]/x[:,0])
+    theta2 = np.arctan(u[:,1]/u[:,0])
+    u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
     #print(x,y)
-    # f1 = plt.figure()
-    # ax1 = f1.add_subplot(111)
-    # ax1.plot(r,y,'ro',label='value_r_V')
-    # plt.legend()
-    # f2 = plt.figure()
-    # ax2 = f2.add_subplot(111)
-    # ax2.plot(r,u_norm,'ro', label='control_r_|u|')
-    # plt.legend()
-    # f3 = plt.figure()
-    # ax3 = f3.add_subplot(111)
-    # ax3.plot(theta,theta2,'ro', label='control_angle')
-    # plt.legend()
+    f1 = plt.figure()
+    ax1 = f1.add_subplot(111)
+    ax1.plot(r,y,'ro',label='value_r_V')
+    plt.legend()
+    f2 = plt.figure()
+    ax2 = f2.add_subplot(111)
+    ax2.plot(r,u_norm,'ro', label='control_r_|u|')
+    plt.legend()
+    f3 = plt.figure()
+    ax3 = f3.add_subplot(111)
+    ax3.plot(theta,theta2,'ro', label='control_angle')
+    plt.legend()
     #print(np.sign(x[:,0]/u[:,0]))
     np.savetxt('{}_training_history.csv'.format(path_prefix),
                training_history,

@@ -46,13 +46,13 @@ class ActorCriticSolver(object):
                 err_control = self.err_control(valid_data).numpy()
                 elapsed_time = time.time() - start_time
                 training_history.append([step, loss_critic, loss_actor, err_value, err_control, elapsed_time])
-                # if self.net_config.verbose:
-                #     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
-                #         step, loss_critic, loss_actor, err_value, err_control, elapsed_time))
+                if self.net_config.verbose:
+                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
+                        step, loss_critic, loss_actor, err_value, err_control, elapsed_time))
             #self.train_step_critic(self.bsde.sample(self.net_config.batch_size, control_fcn=self.control_fcn))
             #self.train_step_actor(self.bsde.sample(self.net_config.batch_size, control_fcn=self.control_fcn))
             #self.train_step_critic(self.bsde.sample_tf(self.net_config.batch_size))
-            #self.train_step_actor(self.bsde.sample_tf(self.net_config.batch_size))
+            self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size))
         return np.array(training_history), x0, y,z,loss_actor#.numpy(), z.numpy()
 
     def loss_critic(self, inputs, training):
@@ -68,7 +68,7 @@ class ActorCriticSolver(object):
     def loss_actor(self, inputs, training):
         y = self.model_actor(inputs, self.model_critic, training)
         loss = tf.reduce_mean(y)
-        return loss#-0.5
+        return loss
 
     def grad_critic(self, inputs, training):
         with tf.GradientTape(persistent=True) as tape:
@@ -108,11 +108,11 @@ class ActorCriticSolver(object):
         return tf.sqrt(error_value / norm)
     
     def err_control(self, inputs):
-        # x0, dw, x_bdry = inputs
-        # error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
-        # norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
-        # return tf.sqrt(error_control / norm)
-        return self.model_actor.lmbd
+        x0, dw, x_bdry = inputs
+        error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
+        norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
+        return tf.sqrt(error_control / norm)
+        #return self.model_actor.lmbd
         
 class CriticModel(tf.keras.Model):
     def __init__(self, config, bsde):
@@ -164,11 +164,13 @@ class ActorModel(tf.keras.Model):
         num_sample = np.shape(dw)[0]
         y = 0
         #x, coef = self.bsde.propagate_tf(num_sample, x0, dw, self.NN_control, training)
-        x, coef = self.bsde.propagate_tf(num_sample, x0, dw, self.lmbd, training)
+        #x, coef = self.bsde.propagate_tf(num_sample, x0, dw, self.lmbd, training)
+        x, dt, coef = self.bsde.propagate2_tf(num_sample, x0, dw, self.NN_control, training)
         for t in range(self.bsde.num_time_interval):
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.lmbd * self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
+            #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.lmbd * self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * self.bsde.delta_t
+            y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1])
             #y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False)
         y = y + self.bsde.V_true(x[:,:,-1])
         return y

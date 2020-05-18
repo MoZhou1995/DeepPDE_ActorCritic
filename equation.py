@@ -50,7 +50,7 @@ class LQR(Equation):
         self.sqrtpqoverbeta = np.sqrt(self.p * self.q) / self.beta
         
     def sample_tf(self, num_sample):
-        #x0 = np.zeros(shape=[num_sample, self.dim])# + [0.7, 0.1]
+        #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
             x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
@@ -66,41 +66,81 @@ class LQR(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    #def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
-    def propagate_tf(self, num_sample, x0, dw_sample, lmbd, training):
-        #x_sample = np.zeros([num_sample, self.dim, self.num_time_interval + 1])
-        #x_sample[:, :, 0] = x0
+    def sample2_tf(self, num_sample):
+        #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
+        x0 = np.zeros(shape=[0, self.dim])
+        while np.shape(x0)[0] < num_sample:
+            x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
+            index = np.where(self.b_np(x_Sample) < 0)
+            x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
+            if np.shape(x0)[0] > num_sample:
+                x0 = x0[0:num_sample,:]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
+    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
+    #def propagate_tf(self, num_sample, x0, dw_sample, lmbd, training):
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
-        #coef = np.ones([num_sample, self.num_time_interval])
         flag = np.ones([num_sample])
         for i in range(self.num_time_interval):
-            #delta_x = self.beta * NN_control(x_sample[:, :, i], training, need_grad=False)\
-            #    * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = self.beta * NN_control(x_i, training, need_grad=False)\
-            #    * self.delta_t + self.sigma * dw_sample[:, :, i]
-            delta_x = self.beta * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #x_iPlus1_temp = x_sample[:, :, i] + delta_x
+            delta_x = self.beta * NN_control(x_i, training, need_grad=False)\
+                * self.delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = self.beta * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
             Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
             delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
-            #inner_product = tf.reduce_sum(delta_x * x_sample[:,:,i], 1, keepdims=False)
             inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
-            #discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_sample[:, :, i]**2,1,keepdims=False)- self.R ** 2)
             discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
-            #coef[:,i] = flag*(1-Exit) + flag * Exit * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
             coef_i = flag*(1-Exit) + flag * Exit * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
             if i==0:
                 coef = tf.reshape(coef_i, [num_sample, 1])
             else:
                 coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
-            #x_sample[:, :, i + 1] = x_sample[:, :, i] + delta_x * tf.reshape(coef[:,i], [num_sample,1])
             x_i = x_i + delta_x * tf.reshape(coef_i, [num_sample,1])
             x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
             flag = flag * (1 - Exit)
-        #return x_sample, coef
         return x_smp, coef
+    
+    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training):
+        x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
+        x_i = x0
+        x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
+        temp = tf.sign(self.R - x0_norm - np.sqrt(3 * self.dim * self.delta_t))\
+            + tf.sign(self.R - x0_norm - (self.delta_t**2))
+        flag = np.ones([num_sample]) + tf.math.floor(temp/2)
+        for i in range(self.num_time_interval):
+            xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
+            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim)\
+                + (flag**2 - 2*flag + 1) * self.delta_t
+            delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1])\
+                + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            #delta_x = self.beta * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
+            x_iPlus1_temp = x_i + delta_x
+            x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(3 * self.dim * self.delta_t))\
+                + tf.sign(self.R - x_iPlus1_temp_norm - (self.delta_t**2))
+            new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
+            
+            delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
+            inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
+            discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
+            coef_i = tf.sign(new_flag) + tf.sign(flag) * (1 - tf.sign(new_flag) ) * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
+            if i==0:
+                coef = tf.reshape(coef_i, [num_sample, 1])
+                dt = tf.reshape(dt_i, [num_sample, 1])
+            else:
+                coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
+                dt = tf.concat([dt, tf.reshape(dt_i, [num_sample, 1])], axis=1)
+            x_i = x_i + delta_x * tf.reshape(coef_i, [num_sample,1])
+            x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
+            flag = new_flag
+        return x_smp, dt, coef
     
     def sample(self, num_sample, control_fcn):
         # uniformly sample x0 in a ball, rejection sampling, maybe to be improved later
