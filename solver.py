@@ -28,6 +28,7 @@ class ActorCriticSolver(object):
         start_time = time.time()
         training_history = []
         valid_data = self.bsde.sample2_tf(self.net_config.valid_size)
+        #valid_data2 = self.bsde.sample2_tf(self.net_config.valid_size)
         # begin sgd iteration
         for step in range(self.net_config.num_iterations+1):
             if step == self.net_config.num_iterations:
@@ -47,7 +48,7 @@ class ActorCriticSolver(object):
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
                         step, loss_critic, loss_actor, err_value, err_control, elapsed_time))
             self.train_step_critic(self.bsde.sample2_tf(self.net_config.batch_size))
-            #self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size))
+            self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size))
         return np.array(training_history), x0, y,z,loss_actor#.numpy(), z.numpy()
 
     def loss_critic(self, inputs, training):
@@ -129,15 +130,18 @@ class CriticModel(tf.keras.Model):
             # _, grad = self.NN_value(x[:,:,t], training, need_grad=True)
             # y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * self.bsde.delta_t
             #     - self.bsde.sigma * tf.reduce_sum(grad * dw[:,:,t], 1, keepdims=True))
-            # use no gradient, does not work at all
+            # new sample use no gradient, does not work at all
             # y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1])
-            # use the gradient of NN_value as gradient V
-            _, grad = self.NN_value(x[:,:,t], training, need_grad=True)
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * tf.reduce_sum(grad * dw[:,:,t], 1, keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
-            # use another NN to represent the gradient of value function
+            # new sample use the gradient of NN_value as gradient V
+            # _, grad = self.NN_value(x[:,:,t], training, need_grad=True)
+            # y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * tf.reduce_sum(grad * dw[:,:,t], 1, keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
+            # new sample use another NN to represent the gradient of value function
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * tf.reduce_sum(self.NN_value_grad(x[:,:,t], training, need_grad=False) * dw[:,:,t], 1, keepdims=True)* tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t)
-            # given the true gradient of value function and true control
+            # new sample given the true gradient of value function and true control
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
+            # ADMM given the true gradient of value function
+            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
+            
         delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
         #delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
         #print("critic delta", delta)
@@ -169,7 +173,8 @@ class ActorModel(tf.keras.Model):
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * self.bsde.delta_t
             y = y + tf.reshape(coef[:,t], [num_sample,1]) * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1])
             #y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False)
-        y = y + self.bsde.V_true(x[:,:,-1])
+        #y = y + self.bsde.V_true(x[:,:,-1])
+        y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False)
         return y
 
 

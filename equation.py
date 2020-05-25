@@ -119,8 +119,8 @@ class LQR(Equation):
         for i in range(self.num_time_interval):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
             dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * self.delta_t
-            #delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
-            delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            #delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
             temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (self.delta_t**2))
