@@ -140,7 +140,9 @@ class CriticModel(tf.keras.Model):
             # new sample given the true gradient of value function and true control
             #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
             # ADMM given the true gradient of value function
-            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
+            #y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * 2 * self.bsde.sqrtpqoverbeta * tf.reduce_sum(x[:,:,t] * dw[:,:,t],1,keepdims=True) * tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t )
+            # ADMM use another NN to represent the gradient of value function
+            y = y + tf.reshape(coef[:,t], [num_sample,1]) * (self.bsde.w_tf(x[:,:,t], model_actor.NN_control(x[:,:,t], training, need_grad=False)) * tf.reshape(dt[:,t], [num_sample,1]) - self.bsde.sigma * tf.reduce_sum(self.NN_value_grad(x[:,:,t], training, need_grad=False) * dw[:,:,t], 1, keepdims=True)* tf.sqrt(tf.reshape(dt[:,t], [num_sample,1])) / self.bsde.sqrt_delta_t)
             
         delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
         #delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
