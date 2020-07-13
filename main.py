@@ -19,9 +19,9 @@ import equation as eqn
 from solver import ActorCriticSolver
 
 
-flags.DEFINE_string('config_path', 'configs/lqr_d2.json',
+flags.DEFINE_string('config_path', 'configs/lqtest_d2.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'test',
+flags.DEFINE_string('exp_name', 'LQtest2dADMM3NN',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -34,7 +34,12 @@ def main(argv):
     config = munch.munchify(config)
     bsde = getattr(eqn, config.eqn_config.eqn_name)(config.eqn_config)
     tf.keras.backend.set_floatx(config.net_config.dtype)
-
+    
+    T = config.eqn_config.total_time
+    N = config.eqn_config.num_time_interval
+    
+    R = config.eqn_config.R
+    
     if not os.path.exists(FLAGS.log_dir):
         os.mkdir(FLAGS.log_dir)
     path_prefix = os.path.join(FLAGS.log_dir, FLAGS.exp_name)
@@ -49,32 +54,54 @@ def main(argv):
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
     num = 1
     for lmbd in [1.0]:
-        loss_act=np.zeros([num])
+        # loss_act=np.zeros([num])
         for index in range(num):
             #ActorCritic_solver = ActorCriticSolver(config, bsde)
             ActorCritic_solver = ActorCriticSolver(config, bsde, lmbd)
-            training_history,x,y,u,loss_actor = ActorCritic_solver.train()
-            loss_act[index] = loss_actor
+            training_history,x,y, true_y, z, true_z = ActorCritic_solver.train()
+            # loss_act[index] = loss_actor
         #print("lmbd", lmbd, "loss_actor", np.mean(loss_act))
-    r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
-    theta = np.arctan(x[:,1]/x[:,0])
-    theta2 = np.arctan(u[:,1]/u[:,0])
-    u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
-    #print(x,y)
-    f1 = plt.figure()
-    ax1 = f1.add_subplot(111)
-    ax1.plot(r,y,'ro',label='value_r_V')
-    plt.legend()
-    f2 = plt.figure()
-    ax2 = f2.add_subplot(111)
-    ax2.plot(r,u_norm,'ro', label='control_r_|u|')
-    plt.legend()
-    f3 = plt.figure()
-    ax3 = f3.add_subplot(111)
-    ax3.plot(theta,theta2,'ro', label='control_angle')
-    plt.legend()
+    # r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
+    # theta = np.arctan(x[:,1]/x[:,0])
+    # theta2 = np.arctan(z[:,1]/z[:,0])
+    # theta3 = np.arctan(true_z[:,1]/true_z[:,0])
+    # u_norm = np.sqrt(np.sum(np.square(u), 1, keepdims=False))
+    # print(x,y)
+    # f1 = plt.figure()
+    # ax1 = f1.add_subplot(111)
+    # ax1.plot(r,y,'ro',label='value_r_V')
+    # plt.legend()
+    # f2 = plt.figure()
+    # ax2 = f2.add_subplot(111)
+    # ax2.plot(r,u_norm,'ro', label='control_r_|u|')
+    # plt.legend()
+    # f3 = plt.figure()#for angle of actor
+    # ax3 = f3.add_subplot(111)
+    # ax3.plot(theta,theta2,'ro', label='control_angle')
+    # ax3 = f3.add_subplot(111)
+    # ax3.plot(theta,theta3,'bo', label='true_angle')
+    # plt.legend()
     #print(np.sign(x[:,0]/u[:,0]))
-    np.savetxt('{}_training_history.csv'.format(path_prefix),
+    # f4 = plt.figure() # for critic
+    # temp = (x[:,0])**2 - (x[:,1])**2
+    # ax4 = f4.add_subplot(111)
+    # ax4.plot(temp,y,'ro', label='critic')
+    # plt.legend()
+    # f5 = plt.figure()
+    # ax5 = f5.add_subplot(111)
+    # ax5.plot(x[:,0]**2 - x[:,1]**2,z[:,0]**2 - z[:,1]**2,'ro')
+    # ax5_2 = f5.add_subplot(111)
+    # ax5_2.plot(x[:,0]**2 - x[:,1]**2,true_z[:,0]**2 - true_z[:,1]**2,'bo')
+    # plt.legend()
+    f6 = plt.figure() # for critic
+    ax6 = f6.add_subplot(111)
+    ax6.plot(x[:,0],y,'ro', label='critic')
+    ax6_2 = f6.add_subplot(111)
+    ax6_2.plot(x[:,0],true_y,'bo', label='true')
+    plt.legend()
+    #plt.hist(y, bins='auto')
+    
+    np.savetxt('{}_T{}_N{}_R{}.csv'.format(path_prefix,T,N,R),
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
