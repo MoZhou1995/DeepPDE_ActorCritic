@@ -1,0 +1,27 @@
+{
+  "eqn_config": {
+    "_comment": "linear quadratic regulator",
+    "eqn_name": "LQR",
+    "total_time": 0.2,
+    "dim": 10,
+    "num_time_interval": 200,
+    "p": 1.0,
+    "q": 1.0,
+    "beta": 1.0,
+    "R": 1.0
+  },
+  "net_config": {
+    "num_hiddens_critic": [100, 100, 100],
+    "num_hiddens_actor": [100, 100, 100],
+    "lr_values_critic": [1e-2, 1e-3, 1e-4],
+    "lr_boundaries_critic": [30000, 40000],
+    "lr_values_actor": [1e-3, 1e-4, 1e-5],
+    "lr_boundaries_actor": [30000, 40000],
+    "num_iterations": 0,
+    "batch_size": 2048,
+    "valid_size": 2048,
+    "logging_frequency": 100,
+    "dtype": "float64",
+    "verbose": true
+  }
+}
