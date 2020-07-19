@@ -192,11 +192,26 @@ class LQtest(Equation):
         #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
-            x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
+            x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample*self.dim,self.dim])
             index = np.where(self.b_np(x_Sample) < 0)
             x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
+    def sample3_tf(self, num_sample): #bdd sample for BM, sample more x0 near boundary
+        # use r^dim as the radius distribution
+        a = 4
+        r_Sample = np.random.uniform(low=0, high=self.R, size=[num_sample,1])
+        r = r_Sample**(1 / (self.dim + a)) * (self.R**((self.dim + a - 1) / (self.dim + a)))
+        angle = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(angle**2, 1, keepdims=True))
+        x0 = r * angle / norm
         dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
         dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
@@ -210,8 +225,8 @@ class LQtest(Equation):
         x_i = x0
         flag = np.ones([num_sample])
         for i in range(self.num_time_interval):
-            delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * self.delta_t + self.sigma * dw_sample[:, :, i]
+            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
+            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * self.delta_t + self.sigma * dw_sample[:, :, i]
             #delta_x = 2 * self.sqrt_lmbd * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
@@ -240,8 +255,8 @@ class LQtest(Equation):
         for i in range(self.num_time_interval):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
             dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * self.delta_t
-            # delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
-            delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
             temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (self.delta_t**2))
