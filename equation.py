@@ -8,16 +8,16 @@ class Equation(object):
 
     def __init__(self, eqn_config):
         self.dim = eqn_config.dim
-        self.total_time = eqn_config.total_time
-        self.num_time_interval = eqn_config.num_time_interval
-        self.delta_t = self.total_time / self.num_time_interval
-        self.sqrt_delta_t = np.sqrt(self.delta_t)
+        # self.total_time = eqn_config.total_time
+        # self.num_time_interval = eqn_config.num_time_interval
+        # self.delta_t = self.total_time / self.num_time_interval
+        # self.sqrt_delta_t = np.sqrt(self.delta_t)
         
-    def sample_tf(self, num_sample):
+    def sample_tf(self, num_sample, T, N):
         """Sample forward SDE."""
         raise NotImplementedError
         
-    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
+    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
         """Sample forward SDE."""
         raise NotImplementedError
 
@@ -52,7 +52,9 @@ class LQR(Equation):
         self.R = eqn_config.R
         self.sqrtpqoverbeta = np.sqrt(self.p * self.q) / self.beta
         
-    def sample_tf(self, num_sample): #normal sample for BM
+    def sample_tf(self, num_sample, T, N): #normal sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
@@ -63,13 +65,15 @@ class LQR(Equation):
                 x0 = x0[0:num_sample,:]
         dw_sample = normal.rvs(size=[num_sample,
                                      self.dim,
-                                     self.num_time_interval]) * self.sqrt_delta_t
+                                     N]) * sqrt_delta_t
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def sample2_tf(self, num_sample): #bdd sample for BM
+    def sample2_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
@@ -78,22 +82,22 @@ class LQR(Equation):
             x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
-        dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
-        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
-    #def propagate_tf(self, num_sample, x0, dw_sample, lmbd, training):
+    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+        delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         flag = np.ones([num_sample])
-        for i in range(self.num_time_interval):
-            delta_x = self.beta * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = self.beta * NN_control(x_i, training, need_grad=False) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = self.beta * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
+        for i in range(N):
+            delta_x = self.beta * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = self.beta * NN_control(x_i, training, need_grad=False) * delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = self.beta * lmbd * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
             Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
@@ -110,22 +114,24 @@ class LQR(Equation):
             flag = flag * (1 - Exit)
         return x_smp, coef
     
-    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training):
+    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
         #temp: 2 for inside (inner); 0 (and 1) for middle layer; -2 (and -1) for boundary or outside
-        temp = tf.sign(self.R - x0_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x0_norm - (self.delta_t**2))
+        temp = tf.sign(self.R - x0_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
         #flag: 2 for inside; 1 for middle layer, which means step size need modification; 0 means boundary, but we will move for at least a first step.
         flag = np.ones([num_sample]) + tf.math.floor(temp/2)
-        for i in range(self.num_time_interval):
+        for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
-            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * self.delta_t
-            delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
-            #delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
+            delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
+            #delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
-            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (self.delta_t**2))
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
             new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
             delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
             inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
@@ -171,7 +177,9 @@ class LQtest(Equation):
         self.R = eqn_config.R
         self.sqrt_lmbd = np.sqrt(self.lmbd)
         
-    def sample_tf(self, num_sample): #normal sample for BM
+    def sample_tf(self, num_sample, T, N): #normal sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
@@ -182,13 +190,15 @@ class LQtest(Equation):
                 x0 = x0[0:num_sample,:]
         dw_sample = normal.rvs(size=[num_sample,
                                      self.dim,
-                                     self.num_time_interval]) * self.sqrt_delta_t
+                                     N]) * sqrt_delta_t
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def sample2_tf(self, num_sample): #bdd sample for BM
+    def sample2_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         #x0 = np.zeros(shape=[num_sample, self.dim]) + [0.99, 0.0]
         x0 = np.zeros(shape=[0, self.dim])
         while np.shape(x0)[0] < num_sample:
@@ -197,37 +207,39 @@ class LQtest(Equation):
             x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
-        dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
-        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def sample3_tf(self, num_sample): #bdd sample for BM, sample more x0 near boundary
+    def sample3_tf(self, num_sample, T, N): #bdd sample for BM, sample more x0 near boundary
         # use r^dim as the radius distribution
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         a = 4
         r_Sample = np.random.uniform(low=0, high=self.R, size=[num_sample,1])
         r = r_Sample**(1 / (self.dim + a)) * (self.R**((self.dim + a - 1) / (self.dim + a)))
         angle = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(angle**2, 1, keepdims=True))
         x0 = r * angle / norm
-        dw_sample = np.random.randint(6,size=[num_sample, self.dim, self.num_time_interval])
-        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * self.sqrt_delta_t)
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training):
-    #def propagate_tf(self, num_sample, x0, dw_sample, lmbd, training):
+    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+        delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         flag = np.ones([num_sample])
-        for i in range(self.num_time_interval):
-            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * self.delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = 2 * self.sqrt_lmbd * lmbd * self.u_true(x_i) * self.delta_t + self.sigma * dw_sample[:, :, i]
+        for i in range(N):
+            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
+            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = 2 * self.sqrt_lmbd * lmbd * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
             Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
@@ -244,22 +256,24 @@ class LQtest(Equation):
             flag = flag * (1 - Exit)
         return x_smp, coef
     
-    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training):
+    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
         #temp: 2 for inside (inner); 0 (and 1) for middle layer; -2 (and -1) for boundary or outside
-        temp = tf.sign(self.R - x0_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x0_norm - (self.delta_t**2))
+        temp = tf.sign(self.R - x0_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
         #flag: 2 for inside; 1 for middle layer, which means step size need modification; 0 means boundary, but we will move for at least a first step.
         flag = np.ones([num_sample]) + tf.math.floor(temp/2)
-        for i in range(self.num_time_interval):
+        for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
-            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * self.delta_t
-            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
-            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / self.sqrt_delta_t
+            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
+            delta_x = 2 * self.sqrt_lmbd * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
+            # delta_x = 2 * self.sqrt_lmbd * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
-            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * self.delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (self.delta_t**2))
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
             new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
             delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
             inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)

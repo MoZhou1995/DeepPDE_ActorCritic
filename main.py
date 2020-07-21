@@ -34,9 +34,9 @@ def main(argv):
     config = munch.munchify(config)
     bsde = getattr(eqn, config.eqn_config.eqn_name)(config.eqn_config)
     tf.keras.backend.set_floatx(config.net_config.dtype)
-    
-    T = config.eqn_config.total_time
-    N = config.eqn_config.num_time_interval
+    dim = config.eqn_config.dim
+    T = config.eqn_config.total_time_critic
+    N = config.eqn_config.num_time_interval_critic
     
     R = config.eqn_config.R
     
@@ -119,6 +119,9 @@ def main(argv):
                delimiter=",",
                header='step, loss_critic, loss_actor, err_value, err_control, elapsed_time',
                comments='')
-
+    figure_data = np.concatenate([x,y, true_y, z, true_z], axis=1)
+    head = "x" + (",")*dim + "y_NN,y_true,z_NN" + (",")*dim + "z_true"
+    np.savetxt('{}_hist.csv'.format(path_prefix), figure_data, delimiter=",",
+               header=head, comments='')
 if __name__ == '__main__':
     app.run(main)
