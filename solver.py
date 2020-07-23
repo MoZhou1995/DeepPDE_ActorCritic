@@ -50,7 +50,7 @@ class ActorCriticSolver(object):
                         step, loss_critic, loss_actor, err_value, err_control, elapsed_time))
             self.train_step_critic(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic))
             self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor))
-        return np.array(training_history), x1, y, true_y, z, true_z
+        return np.array(training_history), x0, y, true_y, z, true_z
 
     def loss_critic(self, inputs, training):
         # this delta is already squared
