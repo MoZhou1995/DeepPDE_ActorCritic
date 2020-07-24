@@ -19,9 +19,9 @@ import equation as eqn
 from solver import ActorCriticSolver
 
 
-flags.DEFINE_string('config_path', 'configs/lqtest_d2.json',
+flags.DEFINE_string('config_path', 'configs/lqtest_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'LQtest2dADMM3NN',
+flags.DEFINE_string('exp_name', 'LQtest10dADMM3NN',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array

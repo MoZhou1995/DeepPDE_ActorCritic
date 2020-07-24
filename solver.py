@@ -34,10 +34,9 @@ class ActorCriticSolver(object):
             if step == self.net_config.num_iterations:
                 x0, dw_sample, x_bdry = valid_data_critic
                 y = self.model_critic.NN_value(x0, training=False, need_grad=False)
-                x1 = np.random.uniform(-self.eqn_config.R,self.eqn_config.R,size=[self.net_config.valid_size,self.eqn_config.dim]) * [0,1]
                 true_y = self.bsde.V_true(x0)
-                z = self.model_actor.NN_control(x1, training=False, need_grad=False)
-                true_z = self.bsde.u_true(x1)
+                z = self.model_actor.NN_control(x0, training=False, need_grad=False)
+                true_z = self.bsde.u_true(x0)
             if step % self.net_config.logging_frequency == 0:
                 loss_critic = self.loss_critic(valid_data_critic, training=False).numpy()
                 loss_actor = self.loss_actor(valid_data_actor, training=False).numpy()

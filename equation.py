@@ -173,6 +173,8 @@ class LQtest(Equation):
     def __init__(self, eqn_config):
         super(LQtest, self).__init__(eqn_config)
         self.sigma = np.sqrt(2.0)
+        self.A = np.array(eqn_config.A)
+        self.B = eqn_config.B
         self.lmbd = eqn_config.lmbd
         self.R = eqn_config.R
         self.sqrt_lmbd = np.sqrt(self.lmbd)
@@ -295,7 +297,7 @@ class LQtest(Equation):
         return tf.reduce_sum(u**2, 1, keepdims=True)
 
     def Z_tf(self, x): #num_sample * 1, actually we can just use V_true
-        return -tf.math.log((x[:,0:1])**2 - (x[:,1:2])**2 + self.R**2 +1) / self.lmbd
+        return -tf.math.log(self.A * (x**2) + self.B) / self.lmbd
 
     def b_np(self, x): #num_sample * 1 contour the boundary
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
@@ -304,8 +306,8 @@ class LQtest(Equation):
         return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x): #num_sample * 1 true value
-        return -tf.math.log((x[:,0:1])**2 - (x[:,1:2])**2 + self.R**2 +1) / self.lmbd
+        return -tf.math.log(self.A * (x**2) + self.B) / self.lmbd
 
     def u_true(self, x): #num_sample * dim true control
-        temp = (x[:,0:1])**2 - (x[:,1:2])**2 + self.R**2 +1
-        return 2 * x * np.array([1,-1]) / temp / self.sqrt_lmbd
+        temp = self.A * (x**2) + self.B
+        return 2 * x * self.A / temp / self.sqrt_lmbd
