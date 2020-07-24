@@ -2,9 +2,11 @@
   "eqn_config": {
     "_comment": "linear quadratic regulator",
     "eqn_name": "LQR",
-    "total_time": 0.1,
+    "total_time_critic": 0.1,
+    "total_time_actor": 0.1,
     "dim": 5,
-    "num_time_interval": 50,
+    "num_time_interval_critic": 50,
+    "num_time_interval_actor": 50,
     "p": 1.0,
     "q": 1.0,
     "beta": 1.0,
