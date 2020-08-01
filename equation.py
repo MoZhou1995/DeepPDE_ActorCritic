@@ -8,6 +8,7 @@ class Equation(object):
 
     def __init__(self, eqn_config):
         self.dim = eqn_config.dim
+        self.gamma = eqn_config.discount
         # self.total_time = eqn_config.total_time
         # self.num_time_interval = eqn_config.num_time_interval
         # self.delta_t = self.total_time / self.num_time_interval
@@ -50,7 +51,7 @@ class LQR(Equation):
         self.q = eqn_config.q
         self.beta = eqn_config.beta
         self.R = eqn_config.R
-        self.sqrtpqoverbeta = np.sqrt(self.p * self.q) / self.beta
+        self.k = np.sqrt((self.gamma**2) * (self.q**2) + 4 * self.p * self.q * (self.beta**2)) / (self.beta**2) / 2
         
     def sample_tf(self, num_sample, T, N): #normal sample for BM
         delta_t = T / N
@@ -89,14 +90,16 @@ class LQR(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+    def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         flag = np.ones([num_sample])
         for i in range(N):
-            delta_x = self.beta * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
-            #delta_x = self.beta * NN_control(x_i, training, need_grad=False) * delta_t + self.sigma * dw_sample[:, :, i]
+            if cheat:
+                delta_x = self.beta * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
+            else:
+                delta_x = self.beta * NN_control(x_i, training, need_grad=False) * delta_t + self.sigma * dw_sample[:, :, i]
             #delta_x = self.beta * lmbd * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
@@ -114,7 +117,7 @@ class LQR(Equation):
             flag = flag * (1 - Exit)
         return x_smp, coef
     
-    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
+    def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -127,8 +130,11 @@ class LQR(Equation):
         for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
             dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
-            delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
-            #delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
+            if cheat:
+                delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
+            else:
+                delta_x = self.beta * NN_control(x_i, training, need_grad=False) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
+            # delta_x = self.beta * self.u_true(x_i) * tf.reshape(dt_i, [num_sample,1]) + self.sigma * dw_sample[:, :, i] * tf.reshape(tf.sqrt(dt_i), [num_sample,1]) / sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
             temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
@@ -150,10 +156,10 @@ class LQR(Equation):
         return x_smp, dt, coef
 
     def w_tf(self, x, u): #num_sample * 1
-        return tf.reduce_sum(self.p * tf.square(x) + self.q * tf.square(u) - 2*self.sqrtpqoverbeta, 1, keepdims=True)
+        return tf.reduce_sum(self.p * tf.square(x) + self.q * tf.square(u), 1, keepdims=True) - 2*self.k*self.dim
 
     def Z_tf(self, x): #num_sample * 1
-        return 0 * tf.reduce_sum(x, 1, keepdims=True) + self.sqrtpqoverbeta * (self.R ** 2)
+        return 0 * tf.reduce_sum(x, 1, keepdims=True) + self.k * (self.R ** 2)
 
     def b_np(self, x): #num_sample * 1
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
@@ -162,10 +168,10 @@ class LQR(Equation):
         return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x): #num_sample * 1
-        return tf.reduce_sum(tf.square(x), 1, keepdims=True) * self.sqrtpqoverbeta
+        return tf.reduce_sum(tf.square(x), 1, keepdims=True) * self.k
 
     def u_true(self, x): #num_sample * dim
-        return -np.sqrt(self.p / self.q) * x
+        return -self.beta * self.k / self.q * x
     
 
 class LQtest(Equation):
