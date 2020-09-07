@@ -45,7 +45,7 @@ class ActorCriticSolver(object):
                 err_value = self.err_value(valid_data_critic).numpy()
                 err_control = self.err_control(valid_data_actor).numpy()
                 elapsed_time = time.time() - start_time
-                training_history.append([step, loss_critic, loss_actor, err_value, err_control, elapsed_time])
+                training_history.append([step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, elapsed_time])
                 if self.net_config.verbose:
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, true_loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
                         step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, elapsed_time))
@@ -110,7 +110,7 @@ class CriticModel(tf.keras.Model):
         self.net_config = config.net_config
         self.bsde = bsde
         self.NN_value = DeepNN(config, "critic")
-        self.NN_value_grad = DeepNN(config, "actor")
+        self.NN_value_grad = DeepNN(config, "critic_grad")
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_actor, training):
@@ -194,10 +194,10 @@ class DeepNN(tf.keras.Model):
         super(DeepNN, self).__init__()
         self.AC = AC
         dim = config.eqn_config.dim
-        if AC == "critic":
-            num_hiddens = config.net_config.num_hiddens_critic
-        elif AC == "actor":
+        if AC == "actor":
             num_hiddens = config.net_config.num_hiddens_actor
+        else: #AC == "critic" or "critic_grad"
+            num_hiddens = config.net_config.num_hiddens_critic
         self.bn_layers = [
             tf.keras.layers.BatchNormalization(
                 momentum=0.99,
@@ -212,8 +212,11 @@ class DeepNN(tf.keras.Model):
                              for i in range(len(num_hiddens))]
         if AC == "critic":
             self.dense_layers.append(tf.keras.layers.Dense(1, activation=None))
-        elif AC == "actor":
+        elif AC == "critic_grad":
             self.dense_layers.append(tf.keras.layers.Dense(dim, activation=None))
+        elif AC == "actor":
+            d = config.eqn_config.control_dim
+            self.dense_layers.append(tf.keras.layers.Dense(d, activation=None))
 
     def call(self, x, training, need_grad):
         """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""

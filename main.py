@@ -19,9 +19,9 @@ import equation as eqn
 from solver import ActorCriticSolver
 
 
-flags.DEFINE_string('config_path', 'configs/lqr_d10.json',
+flags.DEFINE_string('config_path', 'configs/VDP2_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'LQR10dADMM3NN',
+flags.DEFINE_string('exp_name', 'VDP10dADMM3NN',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -35,6 +35,7 @@ def main(argv):
     bsde = getattr(eqn, config.eqn_config.eqn_name)(config.eqn_config)
     tf.keras.backend.set_floatx(config.net_config.dtype)
     dim = config.eqn_config.dim
+    control_dim = config.eqn_config.control_dim
     T = config.eqn_config.total_time_critic
     N = config.eqn_config.num_time_interval_critic
     
@@ -115,12 +116,12 @@ def main(argv):
     
     np.savetxt('{}_T{}_N{}_R{}.csv'.format(path_prefix,T,N,R),
                training_history,
-               fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
+               fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
-               header='step, loss_critic, loss_actor, err_value, err_control, elapsed_time',
+               header='step, loss_critic, loss_actor,true_loss_actor, err_value, err_control, elapsed_time',
                comments='')
     figure_data = np.concatenate([x,y, true_y, z, true_z], axis=1)
-    head = "x" + (",")*dim + "y_NN,y_true,z_NN" + (",")*dim + "z_true"
+    head = "x" + (",")*dim + "y_NN,y_true,z_NN" + (",")*control_dim + "z_true"
     np.savetxt('{}_hist.csv'.format(path_prefix), figure_data, delimiter=",",
                header=head, comments='')
 if __name__ == '__main__':
