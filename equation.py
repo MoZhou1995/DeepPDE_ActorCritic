@@ -565,7 +565,7 @@ class VDP2(Equation):
         nx2 = tf.concat([x2[:,d-1:d],x2[:,0:d-1]],1)
         dv1 = px1 + nx1 #num_sample * d
         dv2 = px2 + nx2 #num_sample * d
-        temp = self.gamma*(x1*px1 + x2*px2) + (dv2**2)/4/self.q - x1*dv1 - ((1-x1**2)*x2 - x1)*dv2
+        temp = self.gamma*(x1*px1 + x2*px2) + (dv2**2)/4/self.q - x2*dv1 - ((1-x1**2)*x2 - x1)*dv2
         return tf.reduce_sum(temp + self.q*(u**2), 1, keepdims=True)
 
     def Z_tf(self, x): #num_sample * 1
