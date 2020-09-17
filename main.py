@@ -21,7 +21,7 @@ from solver import ActorCriticSolver
 
 flags.DEFINE_string('config_path', 'configs/VDP2_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'VDP10dADMM3NN',
+flags.DEFINE_string('exp_name', 'VDP_10dADMM3NN',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -112,7 +112,7 @@ def main(argv):
     # ax8_2 = f8.add_subplot(111)
     # ax8_2.plot(x[:,1],true_z[:,1],'bo',label='true')
     # plt.legend()
-    #plt.hist(y, bins='auto')
+    # plt.hist(true_y.numpy(), bins='auto')
     
     np.savetxt('{}_T{}_N{}_R{}.csv'.format(path_prefix,T,N,R),
                training_history,
