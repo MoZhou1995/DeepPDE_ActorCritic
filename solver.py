@@ -2,20 +2,18 @@ import logging
 import time
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
 DELTA_CLIP = 50.0
 
 
 class ActorCriticSolver(object):
     """The fully connected neural network model."""
     #def __init__(self, config, bsde):
-    def __init__(self, config, bsde, lmbd_init):
+    def __init__(self, config, bsde):
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
         self.model_critic = CriticModel(config, bsde)
-        #self.model_actor = ActorModel(config, bsde)
-        self.model_actor = ActorModel(config, bsde, lmbd_init)
+        self.model_actor = ActorModel(config, bsde)
         lr_schedule_critic = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
             self.net_config.lr_boundaries_critic, self.net_config.lr_values_critic)
         lr_schedule_actor = tf.keras.optimizers.schedules.PiecewiseConstantDecay(
@@ -30,7 +28,8 @@ class ActorCriticSolver(object):
         training_history = []
         valid_data_critic = self.bsde.sample2_tf(self.net_config.valid_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic)
         valid_data_actor = self.bsde.sample2_tf(self.net_config.valid_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
-        true_loss_actor = self.loss_actor(valid_data_actor, training=False, cheat=True).numpy()
+        valid_data_cost = self.bsde.sample0_tf(self.net_config.valid_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
+        true_loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=True, cheat_control=True).numpy()
         # begin sgd iteration
         for step in range(self.net_config.num_iterations+1):
             if step == self.net_config.num_iterations:
@@ -41,14 +40,16 @@ class ActorCriticSolver(object):
                 true_z = self.bsde.u_true(x0)
             if step % self.net_config.logging_frequency == 0:
                 loss_critic = self.loss_critic(valid_data_critic, training=False).numpy()
-                loss_actor = self.loss_actor(valid_data_actor, training=False, cheat=False).numpy()
+                loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=False, cheat_control=False).numpy()
                 err_value = self.err_value(valid_data_critic).numpy()
                 err_control = self.err_control(valid_data_actor).numpy()
+                error_cost = self.error_cost(valid_data_cost).numpy()
+                error_cost2 = self.error_cost2(valid_data_cost).numpy()
                 elapsed_time = time.time() - start_time
-                training_history.append([step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, elapsed_time])
+                training_history.append([step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, error_cost, error_cost2, elapsed_time])
                 if self.net_config.verbose:
-                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, true_loss_actor: %.4e, err_value: %.4e, err_control: %.4e,  elapsed time: %3u" % (
-                        step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, elapsed_time))
+                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, true_loss_actor: %.4e, err_value: %.4e, err_control: %.4e, err_cost: %.4e, err_cost2: %.4e, elapsed time: %3u" % (
+                        step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, error_cost, error_cost2, elapsed_time))
             self.train_step_critic(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic))
             self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor))
         return np.array(training_history), x0, y, true_y, z, true_z
@@ -61,8 +62,8 @@ class ActorCriticSolver(object):
         loss2 = tf.reduce_mean(tf.where(tf.abs(delta_bdry) < DELTA_CLIP, tf.square(delta_bdry), 2 * DELTA_CLIP * tf.abs(delta_bdry) - DELTA_CLIP ** 2))
         return (loss1 + loss2) * 100
     
-    def loss_actor(self, inputs, training, cheat):
-        y = self.model_actor(inputs, self.model_critic, training, cheat)
+    def loss_actor(self, inputs, training, cheat_value, cheat_control):
+        y = self.model_actor(inputs, self.model_critic, training, cheat_value, cheat_control)
         loss = tf.reduce_mean(y)
         return loss
 
@@ -73,9 +74,9 @@ class ActorCriticSolver(object):
         del tape
         return grad
     
-    def grad_actor(self, inputs, training, cheat):
+    def grad_actor(self, inputs, training, cheat_value, cheat_control):
         with tf.GradientTape(persistent=True) as tape:
-            loss_actor = self.loss_actor(inputs, training, cheat)
+            loss_actor = self.loss_actor(inputs, training, cheat_value, cheat_control)
         grad = tape.gradient(loss_actor, self.model_actor.trainable_variables)
         del tape
         return grad
@@ -87,21 +88,33 @@ class ActorCriticSolver(object):
         
     @tf.function
     def train_step_actor(self, train_data):
-        grad = self.grad_actor(train_data, training=False, cheat=False)
+        grad = self.grad_actor(train_data, training=False, cheat_value=False, cheat_control=False)
         self.optimizer_actor.apply_gradients(zip(grad, self.model_actor.trainable_variables))
         
     def err_value(self, inputs):
-        x0, dw, x_bdry = inputs
+        x0, _, _ = inputs
         error_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.V_true(x0)))
         return tf.sqrt(error_value / norm)
     
     def err_control(self, inputs):
-        x0, dw, x_bdry = inputs
+        x0, _, _ = inputs
         error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
         return tf.sqrt(error_control / norm)
         #return self.model_actor.lmbd
+        
+    def error_cost(self, inputs):
+        x0, _, _ = inputs
+        y = self.model_actor(inputs, self.model_critic, training=False, cheat_value=True, cheat_control=False)
+        y_true = self.bsde.V_true(x0)
+        return tf.reduce_mean(y-y_true)
+    
+    def error_cost2(self, inputs):
+        x0, _, _ = inputs
+        y = self.model_actor(inputs, self.model_critic, training=False, cheat_value=False, cheat_control=False)
+        y0 = self.model_critic.NN_value(x0, training=False, need_grad=False)
+        return tf.reduce_mean(y-y0)
         
 class CriticModel(tf.keras.Model):
     def __init__(self, config, bsde):
@@ -156,35 +169,36 @@ class CriticModel(tf.keras.Model):
 
 class ActorModel(tf.keras.Model):
     #def __init__(self, config, bsde):
-    def __init__(self, config, bsde, lmbd_init):
+    def __init__(self, config, bsde):
         super(ActorModel, self).__init__()
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
         self.NN_control = DeepNN(config, "actor")
-        self.lmbd = tf.Variable(initial_value=lmbd_init, trainable=False, dtype='float64')
         self.gamma = config.eqn_config.discount
         
-    def call(self, inputs, model_critic, training, cheat):
+    def call(self, inputs, model_critic, training, cheat_value, cheat_control):
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         # delta_t = self.eqn_config.total_time_actor / self.eqn_config.num_time_interval_actor
         y = 0
         # x, coef = self.bsde.propagate_tf(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
-        x, dt, coef = self.bsde.propagate2_tf(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor, cheat)
+        x, dt, coef = self.bsde.propagate2_tf(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor, cheat_control)
         discount = 1 #broadcast to num_sample x 1
-        if cheat==False:
+        if cheat_control == False:
             for t in range(self.eqn_config.num_time_interval_actor):
                 #y = y + coef[:,t:t+1] * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * delta_t * discount
                 #y = y + coef[:,t:t+1] * self.bsde.w_tf(x[:,:,t], self.lmbd * self.bsde.u_true(x[:,:,t])) * delta_t * discount
                 # y = y + coef[:,t:t+1] * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * delta_t * discount
                 y = y + coef[:,t:t+1] * self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False)) * dt[:,t:t+1] * discount
                 discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
-            y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False) * discount
         else:
             for t in range(self.eqn_config.num_time_interval_actor):
                 y = y + coef[:,t:t+1] * self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) * dt[:,t:t+1] * discount
                 discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
+        if cheat_value == False:
+            y = y + model_critic.NN_value(x[:,:,-1], training, need_grad=False) * discount
+        else:
             y = y + self.bsde.V_true(x[:,:,-1]) * discount
         return y
 

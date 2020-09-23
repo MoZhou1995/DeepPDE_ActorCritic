@@ -90,6 +90,17 @@ class LQR(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
+    def sample0_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
+        x0 = np.zeros(shape=[num_sample, self.dim])# + [0.99, 0.0]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
     def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -236,6 +247,17 @@ class LQtest(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
+    def sample0_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
+        x0 = np.zeros(shape=[num_sample, self.dim])# + [0.99, 0.0]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
     def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N):
         delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -352,6 +374,17 @@ class VDP1(Equation):
             x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
+    def sample0_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
+        x0 = np.zeros(shape=[num_sample, self.dim])# + [0.99, 0.0]
         dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
         dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
@@ -479,6 +512,17 @@ class VDP2(Equation):
             x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
             if np.shape(x0)[0] > num_sample:
                 x0 = x0[0:num_sample,:]
+        dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
+        dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
+        x_bdry = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
+        x_bdry = self.R * x_bdry / norm
+        return x0, dw_sample, x_bdry
+    
+    def sample0_tf(self, num_sample, T, N): #bdd sample for BM
+        delta_t = T / N
+        sqrt_delta_t = np.sqrt(delta_t)
+        x0 = np.zeros(shape=[num_sample, self.dim]) + 0.1
         dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
         dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])

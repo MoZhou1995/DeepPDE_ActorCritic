@@ -21,7 +21,7 @@ from solver import ActorCriticSolver
 
 flags.DEFINE_string('config_path', 'configs/VDP2_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'VDP_10dADMM3NN',
+flags.DEFINE_string('exp_name', 'VDP2_10dADMM3NN',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -53,15 +53,8 @@ def main(argv):
     absl_logging.set_verbosity('info')
 
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
-    num = 1
-    for lmbd in [1.0]:
-        # loss_act=np.zeros([num])
-        for index in range(num):
-            #ActorCritic_solver = ActorCriticSolver(config, bsde)
-            ActorCritic_solver = ActorCriticSolver(config, bsde, lmbd)
-            training_history,x,y, true_y, z, true_z = ActorCritic_solver.train()
-            # loss_act[index] = loss_actor
-        #print("lmbd", lmbd, "loss_actor", np.mean(loss_act))
+    ActorCritic_solver = ActorCriticSolver(config, bsde)
+    training_history,x,y, true_y, z, true_z = ActorCritic_solver.train()
     # r = np.sqrt(np.sum(np.square(x), 1, keepdims=False))
     # theta = np.arctan(x[:,1]/x[:,0])
     # theta2 = np.arctan(z[:,1]/z[:,0])
@@ -116,13 +109,13 @@ def main(argv):
     
     np.savetxt('{}_T{}_N{}_R{}.csv'.format(path_prefix,T,N,R),
                training_history,
-               fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
+               fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
-               header='step, loss_critic, loss_actor,true_loss_actor, err_value, err_control, elapsed_time',
+               header='step, loss_critic, loss_actor,true_loss_actor, err_value, err_control, error_cost,error_cost2, elapsed_time',
                comments='')
     figure_data = np.concatenate([x,y, true_y, z, true_z], axis=1)
     head = "x" + (",")*dim + "y_NN,y_true,z_NN" + (",")*control_dim + "z_true"
-    np.savetxt('{}_hist.csv'.format(path_prefix), figure_data, delimiter=",",
+    np.savetxt('{}_T{}_N{}_R{}_hist.csv'.format(path_prefix,T,N,R), figure_data, delimiter=",",
                header=head, comments='')
 if __name__ == '__main__':
     app.run(main)
