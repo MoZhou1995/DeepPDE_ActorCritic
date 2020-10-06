@@ -324,16 +324,16 @@ class LQtest(Equation):
         return tf.reduce_sum(u**2, 1, keepdims=True)
 
     def Z_tf(self, x): #num_sample * 1, actually we can just use V_true
-        return -tf.math.log(self.A * (x**2) + self.B) / self.lmbd
+        return -tf.math.log(tf.reduce_sum(self.A * (x**2), 1, keepdims=True) + self.B) / self.lmbd
 
     def b_np(self, x): #num_sample * 1 contour the boundary
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x): #num_sample * 1 true value
-        return -tf.math.log(self.A * (x**2) + self.B) / self.lmbd
+        return -tf.math.log(tf.reduce_sum(self.A * (x**2), 1, keepdims=True) + self.B) / self.lmbd
 
     def u_true(self, x): #num_sample * dim true control
-        temp = self.A * (x**2) + self.B
+        temp = tf.reduce_sum(self.A * (x**2), 1, keepdims=True) + self.B
         return 2 * x * self.A / temp / self.sqrt_lmbd
     
 class VDP1(Equation):
