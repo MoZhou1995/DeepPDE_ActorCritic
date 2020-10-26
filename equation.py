@@ -101,7 +101,37 @@ class LQR(Equation):
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
+    def propagate0_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
+        # the most naive scheme, just stop where next step is out
+        delta_t = T / N
+        x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
+        x_i = x0
+        flag = np.ones([num_sample])
+        for i in range(N):
+            if cheat:
+                delta_x = self.beta * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
+            else:
+                delta_x = self.beta * NN_control(x_i, training, need_grad=False) * delta_t + self.sigma * dw_sample[:, :, i]
+            #delta_x = self.beta * lmbd * self.u_true(x_i) * delta_t + self.sigma * dw_sample[:, :, i]
+            x_iPlus1_temp = x_i + delta_x
+            Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
+            Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
+            # delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
+            # inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
+            # discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
+            # coef_i = flag*(1-Exit) + flag * Exit * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
+            coef_i = 1 - Exit
+            if i==0:
+                coef = tf.reshape(coef_i, [num_sample, 1])
+            else:
+                coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
+            x_i = x_i + delta_x * tf.reshape(coef_i, [num_sample,1])
+            x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
+            flag = flag * (1 - Exit)
+        return x_smp, coef
+    
     def propagate_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
+        # the original scheme
         delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
@@ -129,6 +159,7 @@ class LQR(Equation):
         return x_smp, coef
     
     def propagate2_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
+        # the new scheme
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -171,6 +202,9 @@ class LQR(Equation):
 
     def Z_tf(self, x): #num_sample * 1
         return 0 * tf.reduce_sum(x, 1, keepdims=True) + self.k * (self.R ** 2)
+
+    def b_tf(self, x): #num_sample * 1
+        return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
 
     def b_np(self, x): #num_sample * 1
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
@@ -795,3 +829,5 @@ class VDP3(Equation):
         px2 = tf.concat([x2[:,1:d],x2[:,0:1]],1)
         nx2 = tf.concat([x2[:,d-1:d],x2[:,0:d-1]],1)
         return -(2*self.a*x2 - self.epsl*(px2 + nx2))/2/self.q
+    
+
