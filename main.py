@@ -20,7 +20,7 @@ from solver import ActorCriticSolver
 
 flags.DEFINE_string('config_path', 'configs/lqr_d2.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'lqr_2dtest',
+flags.DEFINE_string('exp_name', 'lqr_2dkill',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array

@@ -26,8 +26,8 @@ class ActorCriticSolver(object):
     def train(self):
         start_time = time.time()
         training_history = []
-        valid_data_critic = self.bsde.sample2_tf(self.net_config.valid_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic)
-        valid_data_actor = self.bsde.sample2_tf(self.net_config.valid_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
+        valid_data_critic = self.bsde.sample_tf(self.net_config.valid_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic)
+        valid_data_actor = self.bsde.sample_tf(self.net_config.valid_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
         valid_data_cost = self.bsde.sample0_tf(self.net_config.valid_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor)
         true_loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=True, cheat_control=True).numpy()
         # begin sgd iteration
@@ -39,27 +39,18 @@ class ActorCriticSolver(object):
                 z = self.model_actor.NN_control(x0, training=False, need_grad=False)
                 true_z = self.bsde.u_true(x0)
             if step % self.net_config.logging_frequency == 0:
-                print("step 0")
                 loss_critic = self.loss_critic(valid_data_critic, training=False).numpy()
-                print("step 1")
                 loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=False, cheat_control=False).numpy()
-                print("step 2")
                 err_value = self.err_value(valid_data_critic).numpy()
-                print("step 3")
                 err_control = self.err_control(valid_data_actor).numpy()
-                print("step 4")
                 error_cost = self.error_cost(valid_data_cost).numpy()
-                print("step 5")
                 error_cost2 = self.error_cost2(valid_data_cost).numpy()
-                print("step 6")
                 elapsed_time = time.time() - start_time
                 training_history.append([step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, error_cost, error_cost2, elapsed_time])
                 if self.net_config.verbose:
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, true_loss_actor: %.4e, err_value: %.4e, err_control: %.4e, err_cost: %.4e, err_cost2: %.4e, elapsed time: %3u" % (
                         step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, error_cost, error_cost2, elapsed_time))
-            print("step 7")
             self.train_step_critic(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic))
-            print("step 8")
             self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor))
         return np.array(training_history), x0, y, true_y, z, true_z
 
@@ -136,7 +127,7 @@ class CriticModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_actor, training):
-        print("call critic")
+        # print("call critic")
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         delta_t = self.eqn_config.total_time_critic / self.eqn_config.num_time_interval_critic
@@ -207,7 +198,7 @@ class ActorModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
-        print("call actor")
+        # print("call actor")
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         delta_t = self.eqn_config.total_time_actor / self.eqn_config.num_time_interval_actor

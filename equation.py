@@ -95,7 +95,7 @@ class LQR(Equation):
     def sample0_tf(self, num_sample, T, N): #bdd sample for BM
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)
-        x0 = np.zeros(shape=[num_sample, self.dim])# + [0.99, 0.0]
+        x0 = np.zeros(shape=[num_sample, self.dim]) + 0.01
         dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
         dw_sample = np.floor((dw_sample - 1)/4) * (np.sqrt(3.0) * sqrt_delta_t)
         x_bdry = normal.rvs(size=[num_sample, self.dim])
@@ -162,14 +162,14 @@ class LQR(Equation):
     
     def propagate1_tf(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the most complicated scheme, need to solve a quartic equation to get the coefficient
-        # however, the coefficient does not enter the computation graph
-        print("propagate1_tf")
+        # print("propagate1_tf")
         delta_t = T / N
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         flag = np.ones([num_sample])
-        tf.compat.v1.enable_eager_execution()
+        # tf.compat.v1.enable_eager_execution()
         for i in range(N):
+            # print("step ",i)
             if cheat:
                 delta_x_drift = self.beta * self.u_true(x_i) * delta_t
             else:
@@ -179,47 +179,90 @@ class LQR(Equation):
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
             Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
-            tf.compat.v1.enable_eager_execution(Exit)
-            Exit = Exit.numpy() # make it numpy array
+            
+            # the following code is to explicitly solve a quartic equation [a,b,c,d,e]*[x^4,x^3,x^2,x,1]=0 to get sqrt_rho
+            # we want to find rho s.t. x_i + drift * rho + diffusion * sqrt_rho is on the boundary
+            a = tf.reduce_sum(delta_x_drift**2, axis=1, keepdims=False) # shape = [num_sample] for a b c d e p q Delta_0 Delta_1
+            b = 2 * tf.reduce_sum(delta_x_drift * delta_x_diffusion, axis=1, keepdims=False)
+            c = tf.reduce_sum(2 * delta_x_drift * x_i + (delta_x_diffusion**2), axis=1, keepdims=False)
+            d = 2 * tf.reduce_sum(delta_x_diffusion * x_i, axis=1, keepdims=False)
+            e = tf.reduce_sum(x_i**2, axis=1, keepdims=False) - self.R**2
+            p = (8*a*c - 3*(b**2)) / (8*(a**2))
+            q = (b**3 - 4*a*b*c + 8*(a**2)*d) / (8 * (a**3))
+            # we can find that q is sometimes positive and sometimes negative
+            sign_q = tf.sign(q)
+            Delta_0 = c**2 - 3*b*d + 12*a*e
+            Delta_1 = 2*(c**3) - 9*b*c*d + 27*(b**2)*e + 27*a*(d**2) - 72*a*c*e
+            Delta_2 = Delta_1**2 - 4*(Delta_0**3)
+            sign_Delta_2 = tf.sign(Delta_2)
+            signal_Delta_2 = tf.math.ceil((sign_Delta_2+1)/2)
+            # this is for sign_Delta >= 0
+            QQ = (Delta_1 + ( tf.abs(Delta_2) )**0.5 ) / 2 # the absolute value here is to make sure that no nan
+            Q = tf.sign(QQ) * tf.abs(QQ)**(1/3) #I don't know why python cannot compute the cubic root of negative number
+            S_plus = 0.5 * tf.abs((Q + Delta_0/Q) / (3*a) - 2*p/3)**0.5
+            # This is for sign_Delta < 0
+            phi = tf.math.acos( tf.math.minimum( tf.abs(Delta_1**2 / 4/ Delta_0**3)**0.5,1) )
+            S_minus = 0.5 * tf.abs(2 * (tf.abs(Delta_0)**0.5) * tf.math.cos(phi/3) / (3*a) - 2*p/3)**0.5
+            S = signal_Delta_2 * S_plus + (1-signal_Delta_2) * S_minus
+            S = S + 1-tf.abs(tf.sign(S)) # avoid the case when S=0
+            # temp_plus = -4*(S**2) -2*p + q/S
+            # temp_minus = -4*(S**2) -2*p - q/S
+            # sign_temp_plus = tf.sign(temp_plus)
+            # sign_temp_minus = tf.sign(temp_minus)
+            temp = -4*(S**2) -2*p + tf.abs(q/S)
+            sqrt_rho = 0.5 * tf.abs(temp)**0.5 - b/4/a - sign_q*S
+            # root1 = 0.5 * (q/S - 4*(S**2) - 2*p)**0.5 - b/4/a - S
+            # root2 = - 0.5 * (q/S - 4*(S**2) - 2*p)**0.5 - b/4/a - S
+            # root3 = 0.5 * (-q/S - 4*(S**2) - 2*p)**0.5 - b/4/a + S
+            # root4 = - 0.5 * (-q/S - 4*(S**2) - 2*p)**0.5 - b/4/a + S
+            # root = tf.concat([[root1],[root2],[root3],[root4]],axis=0)
+            # root = tf.transpose(root)
+            # test by result = a*(sqrt_rho**4) + b*(sqrt_rho**3) + c*(sqrt_rho**2) + d*sqrt_rho+e
+            # tf.math.reduce_max(tf.abs(result*Exit))
+            # test all cases, note that Delta_0 and Delta_2 cannot be both negative
+            #Exit*(100*sign_q + 10*tf.sign(Delta_0) + sign_Delta_2)
+            coef_i = (1 - Exit) * flag + flag * Exit * (sqrt_rho**2)
+            
+            # Exit = Exit.numpy() # make it numpy array
             #Exit = tf.make_ndarray(Exit)
-            # delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
-            # inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
-            # discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
-            # coef_i = flag*(1-Exit) + flag * Exit * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
-            # coef_i is 1 for in, 0 for out and in (0,1) at the boundary
             # find the index for boundary
-            exit_index = np.where(flag*Exit==1) # care the dim, np array, not tensor
-            if exit_index: # then we need to compute the coefficients at exit_index
-                num_exit = np.shape(exit_index)[1]
-                exit_index = np.reshape(exit_index, [num_exit])
-                # set coef_i except at exit_index
-                coef_i = (1 - Exit) * flag # np array, not tensor
-                #only deal with the exit_index, prepare for the function first
-                x_i_np = x_i.numpy()
-                delta_x_drift_np = delta_x_drift.numpy()
-                delta_x_diffusion_np = delta_x_diffusion.numpy()
-                x_exit = x_i_np[exit_index,:]
-                delta_x_drift_exit = delta_x_drift_np[exit_index,:]
-                delta_x_diffusion_exit = delta_x_diffusion_np[exit_index,:]
-                # It seems that fsolve does not work well
-                # def f(r): # a function
-                #     rho = np.reshape(r, [num_exit, 1])
-                #     return np.sum((x_exit + np.sqrt(rho) * delta_x_diffusion_exit + rho * delta_x_drift_exit)**2,1,keepdims=False) - self.R**2
-                # rho = fsolve(func=f,x0 = 0.5 + 0*exit_index)
-                # if we use bisection, we need to loop
-                rho=[]
-                for j in range(num_exit):
-                    def fi(r):
-                        return np.sum((x_exit[j,:] + np.sqrt(r) * delta_x_diffusion_exit[j,:] + r * delta_x_drift_exit[j,:])**2) - self.R**2
-                    rho_j = bisect(fi, 0, 1)
-                    rho.append(rho_j)
-                coef_i[exit_index] = np.array(rho)
+            # exit_index = tf.where(flag*Exit==1) # care the dim, num_exit x 1
+            # num_exit = tf.shape(exit_index)[0] # just an integer n
+            # exit_index = exit_index[:,0]
+            # x_exit = x_i[exit_index,:] # but we cannot use exit_index as our index
+            # if exit_index: # then we need to compute the coefficients at exit_index
+            #     num_exit = np.shape(exit_index)[1]
+            #     exit_index = np.reshape(exit_index, [num_exit])
+            #     # set coef_i except at exit_index
+            #     coef_i = (1 - Exit) * flag # np array, not tensor
+            #     #only deal with the exit_index, prepare for the function first
+            #     x_i_np = x_i.numpy()
+            #     delta_x_drift_np = delta_x_drift.numpy()
+            #     delta_x_diffusion_np = delta_x_diffusion.numpy()
+            #     x_exit = x_i_np[exit_index,:]
+            #     delta_x_drift_exit = delta_x_drift_np[exit_index,:]
+            #     delta_x_diffusion_exit = delta_x_diffusion_np[exit_index,:]
+            #     # It seems that fsolve does not work well
+            #     # def f(r): # a function
+            #     #     rho = np.reshape(r, [num_exit, 1])
+            #     #     return np.sum((x_exit + np.sqrt(rho) * delta_x_diffusion_exit + rho * delta_x_drift_exit)**2,1,keepdims=False) - self.R**2
+            #     # rho = fsolve(func=f,x0 = 0.5 + 0*exit_index)
+            #     # if we use bisection, we need to loop
+            #     rho=[]
+            #     for j in range(num_exit):
+            #         def fi(r):
+            #             return np.sum((x_exit[j,:] + np.sqrt(r) * delta_x_diffusion_exit[j,:] + r * delta_x_drift_exit[j,:])**2) - self.R**2
+            #         rho_j = bisect(fi, 0, 1)
+            #         rho.append(rho_j)
+            #     coef_i[exit_index] = np.array(rho)
             if i==0:
-                coef = np.reshape(coef_i, [num_sample, 1])
+                coef = tf.reshape(coef_i, [num_sample, 1])
             else:
-                coef = np.concatenate([coef, np.reshape(coef_i, [num_sample, 1])], axis=1)
-            x_i = x_i + delta_x_drift * np.reshape(coef_i, [num_sample,1]) + delta_x_diffusion * np.reshape(coef_i**0.5, [num_sample,1])
-            x_smp = tf.concat([x_smp, np.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
+                coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
+            # print(tf.reduce_sum(coef_i))
+            # print(tf.reduce_sum(x_i))
+            x_i = x_i + delta_x_drift * tf.reshape(coef_i, [num_sample,1]) + delta_x_diffusion * tf.reshape(coef_i**0.5, [num_sample,1])
+            x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
             flag = flag * (1 - Exit)
         return x_smp, coef
     
