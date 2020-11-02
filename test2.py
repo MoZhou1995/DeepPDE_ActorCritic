@@ -32,7 +32,7 @@ class solver(object):
     def __init__(self, total_time, dim):
         self.T = total_time
         self.dim = dim
-        self.lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay([10], [1e-2,1e-3])
+        self.lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay([10], [1e-1,1e-2])
         # define the model
         self.model = model(total_time, dim)
         # define Adam optimizer
@@ -43,6 +43,7 @@ class solver(object):
             print("step ", step)
             x0, dw_sample = sample(num_sample, self.dim, self.T, num_interval)
             self.train_step(num_sample, x0, dw_sample, self.T, num_interval)
+            print("u", self.model.u.numpy())
 
     def grad(self, num_sample, x0, dw_sample, T, N):
         print("call grad")
@@ -69,7 +70,6 @@ class model(tf.keras.Model):
         self.dim = dim
         
     def call(self, x0, dw):
-        print(self.u)
         # compute the running cost, which is also the loss function
         return 0
     
