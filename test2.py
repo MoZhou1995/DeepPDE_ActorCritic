@@ -107,7 +107,7 @@ def propagate(num_sample, dim, x0, dw_sample, T, N):
                 new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
                 return tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
             sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
-            rho = sqrt_rho**2
+            rho = sqrt_rho_final**2
             return tf.tensor_scatter_nd_update(coef_i_temp, exit_index, rho)
         coef_i = tf.cond(num_exit>0, have_exit, no_exit)
         if i==0:
