@@ -104,18 +104,18 @@ def propagate(x0, dw_sample, T, N):
             sqrt_rho = 0.5 * tf.abs(temp)**0.5 - b/4/a - sign_q*S
             check_index = tf.where( (1-sqrt_rho) * sqrt_rho < 0)
             print("sqrt_rho", sqrt_rho)
-            rho = sqrt_rho**2
-            # def every_point_good():
-            #     return sqrt_rho
-            # def some_point_not_good():
-            #     new_temp = -4*(S**2) -2*p - tf.abs(q/S)
-            #     new_sqrt_rho = 0.5 * tf.abs(new_temp)**0.5 - b/4/a + sign_q*S # new_temp should be positive at check_index
-            #     new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
-            #     result_some_point_not_good = tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
-            #     print("result_some_point_not_good", result_some_point_not_good)
-            #     return result_some_point_not_good
-            # sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
-            # rho = sqrt_rho_final**2
+            # rho = sqrt_rho**2
+            def every_point_good():
+                return sqrt_rho
+            def some_point_not_good():
+                new_temp = -4*(S**2) -2*p - tf.abs(q/S)
+                new_sqrt_rho = 0.5 * tf.abs(new_temp)**0.5 - b/4/a + sign_q*S # new_temp should be positive at check_index
+                new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
+                result_some_point_not_good = tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
+                print("result_some_point_not_good", result_some_point_not_good)
+                return result_some_point_not_good
+            sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
+            rho = sqrt_rho_final**2
             result_have_exit = tf.tensor_scatter_nd_update(coef_i_temp, exit_index, rho)
             print("result_have_exit",result_have_exit)
             return result_have_exit
