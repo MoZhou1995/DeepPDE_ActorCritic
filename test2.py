@@ -15,9 +15,9 @@ from scipy.stats import multivariate_normal as normal
 tf.keras.backend.set_floatx("float64")
 # parameters
 total_time = 1.0
-dim = 2
+Dim = 2
 num_interval = 2
-num_sample = 32
+Num_sample = 32
 R = 1.0
 gamma = 1.0
 sigma = np.sqrt(2.0)
@@ -45,7 +45,9 @@ def sample(num_sample, dim, T, N):
     return x0, dw_sample
 
 # SDE solver, return x_smp and coef, this is the key point to test
-def propagate(num_sample, dim, x0, dw_sample, T, N):
+def propagate(x0, dw_sample, T, N):
+    num_sample = np.shape(x0)[0]
+    dim = np.shape(x0)[1]
     delta_t = T / N
     x_smp = tf.reshape(x0, [num_sample, dim, 1])
     x_i = x0
@@ -56,8 +58,10 @@ def propagate(num_sample, dim, x0, dw_sample, T, N):
         delta_x = delta_x_drift + delta_x_diffusion
         x_iPlus1_temp = x_i + delta_x
         Exit = b_tf(x_iPlus1_temp) #Exit>=0 means out
+        print("Exit",Exit)#,tf.strings.to_hash_bucket_fast(Exit,1))
         Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample])
         coef_i_temp = (1 - Exit) * flag
+        print("coef_i_temp",coef_i_temp)
         exit_index = tf.where(flag*Exit==1) # care the dim, num_exit x 1
         num_exit = tf.shape(exit_index)[0]
         def no_exit():
@@ -68,7 +72,7 @@ def propagate(num_sample, dim, x0, dw_sample, T, N):
             delta_x_diffusion_exit = tf.gather_nd(delta_x_diffusion,exit_index)
              # the following code is to explicitly solve a quartic equation [a,b,c,d,e]*[x^4,x^3,x^2,x,1]=0 to get sqrt_rho
             # we want to find rho s.t. x_i + drift * rho + diffusion * sqrt_rho is on the boundary
-            a = tf.reduce_sum(delta_x_drift_exit**2, axis=1, keepdims=False) # shape = [num_sample] for a b c d e p q Delta_0 Delta_1
+            a = tf.reduce_sum(delta_x_drift_exit**2, axis=1, keepdims=False) # shape = [num_exit] for a b c d e p q Delta_0 Delta_1
             b = 2 * tf.reduce_sum(delta_x_drift_exit * delta_x_diffusion_exit, axis=1, keepdims=False)
             c = tf.reduce_sum(2 * delta_x_drift_exit * x_exit + (delta_x_diffusion_exit**2), axis=1, keepdims=False)
             d = 2 * tf.reduce_sum(delta_x_diffusion_exit * x_exit, axis=1, keepdims=False)
@@ -99,17 +103,24 @@ def propagate(num_sample, dim, x0, dw_sample, T, N):
             temp = -4*(S**2) -2*p + tf.abs(q/S)
             sqrt_rho = 0.5 * tf.abs(temp)**0.5 - b/4/a - sign_q*S
             check_index = tf.where( (1-sqrt_rho) * sqrt_rho < 0)
-            def every_point_good():
-                return sqrt_rho
-            def some_point_not_good():
-                new_temp = -4*(S**2) -2*p - tf.abs(q/S)
-                new_sqrt_rho = 0.5 * tf.abs(new_temp)**0.5 - b/4/a + sign_q*S # new_temp should be positive at check_index
-                new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
-                return tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
-            sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
-            rho = sqrt_rho_final**2
-            return tf.tensor_scatter_nd_update(coef_i_temp, exit_index, rho)
+            print("sqrt_rho", sqrt_rho)
+            rho = sqrt_rho**2
+            # def every_point_good():
+            #     return sqrt_rho
+            # def some_point_not_good():
+            #     new_temp = -4*(S**2) -2*p - tf.abs(q/S)
+            #     new_sqrt_rho = 0.5 * tf.abs(new_temp)**0.5 - b/4/a + sign_q*S # new_temp should be positive at check_index
+            #     new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
+            #     result_some_point_not_good = tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
+            #     print("result_some_point_not_good", result_some_point_not_good)
+            #     return result_some_point_not_good
+            # sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
+            # rho = sqrt_rho_final**2
+            result_have_exit = tf.tensor_scatter_nd_update(coef_i_temp, exit_index, rho)
+            print("result_have_exit",result_have_exit)
+            return result_have_exit
         coef_i = tf.cond(num_exit>0, have_exit, no_exit)
+        print("coef_i", coef_i)
         if i==0:
             coef = tf.reshape(coef_i, [num_sample, 1])
         else:
@@ -124,18 +135,19 @@ def propagate(num_sample, dim, x0, dw_sample, T, N):
 class solver(object):
     def __init__(self, total_time, dim):
         self.T = total_time
-        self.dim = dim
+        self.dim = Dim
         self.lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay([6], [1e-1,1e-2])
         # define the model
         self.model = model(total_time, dim)
+        self.num_sample = Num_sample
         # define Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr_schedule, epsilon=1e-8)
     
     def train(self, steps):
         for step in range(steps):
             print("step ", step)
-            x0, dw_sample = sample(num_sample, self.dim, self.T, num_interval)
-            self.train_step(num_sample, x0, dw_sample, self.T, num_interval)
+            x0, dw_sample = sample(self.num_sample, self.dim, self.T, num_interval)
+            self.train_step(self.num_sample, x0, dw_sample, self.T, num_interval)
             print("u", self.model.u.numpy())
 
     def grad(self, num_sample, x0, dw_sample, T, N):
@@ -161,13 +173,13 @@ class model(tf.keras.Model):
         self.u = tf.Variable(initial_value = 1.0, trainable=True, dtype="float64")
         print(self.u)
         self.T = total_time
-        self.dim = dim
+        self.dim = Dim
         self.N = num_interval
-        self.num_sample = num_sample
+        self.num_sample = Num_sample
         self.gamma = gamma
         
     def call(self, x0, dw):
-        x, coef = propagate(self.num_sample, self.dim, x0, dw, self.T, self.N)
+        x, coef = propagate(x0, dw, self.T, self.N)
         # compute the running cost, which is also the loss function
         delta_t = self.T / self.N
         y = 0
@@ -181,7 +193,7 @@ class model(tf.keras.Model):
         return y #num_sample x dim
     
 # the following is the main function
-Solver = solver(total_time, dim)    
+Solver = solver(total_time, Dim)    
 Solver.train(3)
 
 
