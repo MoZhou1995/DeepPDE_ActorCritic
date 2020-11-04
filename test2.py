@@ -14,10 +14,10 @@ import tensorflow as tf
 from scipy.stats import multivariate_normal as normal
 tf.keras.backend.set_floatx("float64")
 # parameters
-total_time = 1.0
+total_time = 0.2
 Dim = 2
-num_interval = 2
-Num_sample = 32
+num_interval = 50
+Num_sample = 256
 R = 1.0
 gamma = 1.0
 sigma = np.sqrt(2.0)
@@ -30,7 +30,7 @@ def b_tf(x): #num_sample * 1
 
 # sample x0 and dw, 
 def sample(num_sample, dim, T, N):
-    print("call sample")
+    #print("call sample")
     delta_t = T / N
     sqrt_delta_t = np.sqrt(delta_t)
     x0 = np.zeros(shape=[0, dim])
@@ -38,7 +38,7 @@ def sample(num_sample, dim, T, N):
         x_Sample = np.random.uniform(low=-R, high=R, size=[num_sample*dim,dim])
         index = np.where(b_np(x_Sample) < 0)
         x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
-        # print(np.shape(x0)[0])
+        # #print(np.shape(x0)[0])
         if np.shape(x0)[0] > num_sample:
             x0 = x0[0:num_sample,:]
     dw_sample = normal.rvs(size=[num_sample,dim,N]) * sqrt_delta_t
@@ -58,14 +58,14 @@ def propagate(x0, dw_sample, T, N):
         delta_x = delta_x_drift + delta_x_diffusion
         x_iPlus1_temp = x_i + delta_x
         Exit = b_tf(x_iPlus1_temp) #Exit>=0 means out
-        print("Exit",Exit)#,tf.strings.to_hash_bucket_fast(Exit,1))
+        #print("Exit",Exit)#,tf.strings.to_hash_bucket_fast(Exit,1))
         Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample])
         coef_i_temp = (1 - Exit) * flag
-        print("coef_i_temp",coef_i_temp)
+        #print("coef_i_temp",coef_i_temp)
         exit_index = tf.where(flag*Exit==1) # care the dim, num_exit x 1
         num_exit = tf.shape(exit_index)[0]
-        def no_exit():
-            return coef_i_temp
+        # def no_exit():
+        #     return coef_i_temp
         def have_exit():
             x_exit =tf.gather_nd(x_i,exit_index)
             delta_x_drift_exit = tf.gather_nd(delta_x_drift,exit_index)
@@ -103,7 +103,7 @@ def propagate(x0, dw_sample, T, N):
             temp = -4*(S**2) -2*p + tf.abs(q/S)
             sqrt_rho = 0.5 * tf.abs(temp)**0.5 - b/4/a - sign_q*S
             check_index = tf.where( (1-sqrt_rho) * sqrt_rho < 0)
-            print("sqrt_rho", sqrt_rho)
+            #print("sqrt_rho", sqrt_rho)
             # rho = sqrt_rho**2
             def every_point_good():
                 return sqrt_rho
@@ -112,21 +112,22 @@ def propagate(x0, dw_sample, T, N):
                 new_sqrt_rho = 0.5 * tf.abs(new_temp)**0.5 - b/4/a + sign_q*S # new_temp should be positive at check_index
                 new_sqrt_rho = tf.gather(new_sqrt_rho, check_index[:,0])
                 result_some_point_not_good = tf.tensor_scatter_nd_update(sqrt_rho, check_index, new_sqrt_rho)
-                print("result_some_point_not_good", result_some_point_not_good)
+                #print("result_some_point_not_good", result_some_point_not_good)
                 return result_some_point_not_good
             sqrt_rho_final = tf.cond(tf.shape(check_index)[0] > 0, some_point_not_good, every_point_good)
             rho = sqrt_rho_final**2
             result_have_exit = tf.tensor_scatter_nd_update(coef_i_temp, exit_index, rho)
-            print("result_have_exit",result_have_exit)
+            #print("result_have_exit",result_have_exit)
             return result_have_exit
-        coef_i = tf.cond(num_exit>0, have_exit, no_exit)
-        print("coef_i", coef_i)
+        #coef_i = tf.cond(num_exit>0, have_exit, no_exit)
+        coef_i = have_exit()
+        #print("coef_i", coef_i)
         if i==0:
             coef = tf.reshape(coef_i, [num_sample, 1])
         else:
             coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
-            # print(tf.reduce_sum(coef_i))
-            # print(tf.reduce_sum(x_i))
+            # #print(tf.reduce_sum(coef_i))
+            # #print(tf.reduce_sum(x_i))
             x_i = x_i + delta_x_drift * tf.reshape(coef_i, [num_sample,1]) + delta_x_diffusion * tf.reshape(coef_i**0.5, [num_sample,1])
             x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, dim, 1])], axis=2)
             flag = flag * (1 - Exit)
@@ -136,7 +137,7 @@ class solver(object):
     def __init__(self, total_time, dim):
         self.T = total_time
         self.dim = Dim
-        self.lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay([6], [1e-1,1e-2])
+        self.lr_schedule = tf.keras.optimizers.schedules.PiecewiseConstantDecay([100], [1e-1,1e-2])
         # define the model
         self.model = model(total_time, dim)
         self.num_sample = Num_sample
@@ -145,24 +146,25 @@ class solver(object):
     
     def train(self, steps):
         for step in range(steps):
-            print("step ", step)
+            #print("step ", step)
             x0, dw_sample = sample(self.num_sample, self.dim, self.T, num_interval)
+            loss = tf.reduce_mean(self.model(x0, dw_sample)).numpy()
             self.train_step(self.num_sample, x0, dw_sample, self.T, num_interval)
-            print("u", self.model.u.numpy())
+            print("step ",step,"u", self.model.u.numpy(), "loss", loss)
 
     def grad(self, num_sample, x0, dw_sample, T, N):
-        # print("call grad")
+        # #print("call grad")
         with tf.GradientTape(persistent=True) as tape:
-            loss = self.model(x0, dw_sample) #+ self.model.u**2
-        # print("trainable variable", self.model.trainable_variables)
+            loss = tf.reduce_mean(self.model(x0, dw_sample)) #+ self.model.u**2
+        # #print("trainable variable", self.model.trainable_variables)
         Grad = tape.gradient(loss, self.model.trainable_variables)
-        # print("Grad",Grad)
+        # #print("Grad",Grad)
         del tape
         return Grad
     #define training
     @tf.function
     def train_step(self, num_sample, x0, dw_sample, T, N):
-        # print("call train_step")
+        # #print("call train_step")
         gradient = self.grad(num_sample, x0, dw_sample, T, N)
         self.optimizer.apply_gradients(zip(gradient, self.model.trainable_variables))
     
@@ -170,8 +172,8 @@ class model(tf.keras.Model):
     def __init__(self, total_time, dim):
         super(model, self).__init__()
         # the trainable variable u
-        self.u = tf.Variable(initial_value = 1.0, trainable=True, dtype="float64")
-        print(self.u)
+        self.u = tf.Variable(initial_value = -1.0, trainable=True, dtype="float64")
+        #print(self.u)
         self.T = total_time
         self.dim = Dim
         self.N = num_interval
@@ -194,7 +196,7 @@ class model(tf.keras.Model):
     
 # the following is the main function
 Solver = solver(total_time, Dim)    
-Solver.train(3)
+Solver.train(40)
 
 
 
