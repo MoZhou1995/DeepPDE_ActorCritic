@@ -58,7 +58,6 @@ def main(argv):
     theta2 = np.arctan(z[:,1]/z[:,0])
     theta3 = np.arctan(true_z[:,1]/true_z[:,0])
     u_norm = np.sqrt(np.sum(np.square(z), 1, keepdims=False))
-    # print(x,y)
     f1 = plt.figure()
     ax1 = f1.add_subplot(111)
     ax1.plot(r,y,'ro',label='value_r_V')

@@ -3,8 +3,11 @@ import time
 import numpy as np
 import tensorflow as tf
 DELTA_CLIP = 50.0
-
-
+'''
+always care: what sample for two validations and two trainings (normal or bdd),
+how do we propagate (naive, intersection, kill diffusion)
+what TD do we use (4 kinds)
+'''
 class ActorCriticSolver(object):
     """The fully connected neural network model."""
     #def __init__(self, config, bsde):
@@ -50,8 +53,8 @@ class ActorCriticSolver(object):
                 if self.net_config.verbose:
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, true_loss_actor: %.4e, err_value: %.4e, err_control: %.4e, err_cost: %.4e, err_cost2: %.4e, elapsed time: %3u" % (
                         step, loss_critic, loss_actor, true_loss_actor, err_value, err_control, error_cost, error_cost2, elapsed_time))
-            self.train_step_critic(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic))
-            self.train_step_actor(self.bsde.sample2_tf(self.net_config.batch_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor))
+            self.train_step_critic(self.bsde.sample_tf(self.net_config.batch_size, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic))
+            self.train_step_actor(self.bsde.sample_tf(self.net_config.batch_size, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor))
         return np.array(training_history), x0, y, true_y, z, true_z
 
     def loss_critic(self, inputs, training):
@@ -61,7 +64,8 @@ class ActorCriticSolver(object):
         loss1 = tf.reduce_mean(tf.where(tf.abs(delta) < DELTA_CLIP, tf.square(delta), 2 * DELTA_CLIP * tf.abs(delta) - DELTA_CLIP ** 2))
         loss2 = tf.reduce_mean(tf.where(tf.abs(delta_bdry) < DELTA_CLIP, tf.square(delta_bdry), 2 * DELTA_CLIP * tf.abs(delta_bdry) - DELTA_CLIP ** 2))
         return (loss1 + loss2) * 100
-    
+        # return loss1
+        
     def loss_actor(self, inputs, training, cheat_value, cheat_control):
         y = self.model_actor(inputs, self.model_critic, training, cheat_value, cheat_control)
         loss = tf.reduce_mean(y)
@@ -127,7 +131,6 @@ class CriticModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_actor, training):
-        # print("call critic")
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         delta_t = self.eqn_config.total_time_critic / self.eqn_config.num_time_interval_critic
@@ -138,6 +141,9 @@ class CriticModel(tf.keras.Model):
         x, coef = self.bsde.propagate1_tf(num_sample, x0, dw, model_actor.NN_control, training, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic, cheat=False)
         # x, dt, coef = self.bsde.propagate2_tf(num_sample, x0, dw, model_actor.NN_control, training, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic, cheat=False)
         for t in range(self.eqn_config.num_time_interval_critic):
+            # old sample with everything true
+            # y = y + coef[:,t:t+1] * (self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) - self.gamma * self.bsde.V_true(x[:,:,t]) 
+            #     ) * delta_t - (coef[:,t:t+1]**0.5) * self.bsde.sigma * tf.reduce_sum(self.bsde.V_grad_true(x[:,:,t]) * dw[:,:,t], 1, keepdims=True)
             # old sample with true gradient of V
             # y = y + coef[:,t:t+1] * ((self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t])) - self.gamma * self.NN_value(x[:,:,t], training, need_grad=False)) * delta_t -self.bsde.sigma * 2 * tf.reduce_sum(np.array([-1,1]) * x[:,:,t] * dw[:,:,t],1,keepdims=True) / self.bsde.lmbd / ((x[:,0:1,t])**2 - (x[:,1:2,t])**2 + self.bsde.R**2 +1))
             # old sample with another NN TD3
@@ -183,7 +189,8 @@ class CriticModel(tf.keras.Model):
         # delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
         # for TD3 and TD4
         delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
-        #delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
+        # when you want everything true
+        # delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
         delta_bdry = self.NN_value(x_bdry, training, need_grad=False) - self.bsde.Z_tf(x_bdry)
         return delta, delta_bdry
 
@@ -198,7 +205,6 @@ class ActorModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
-        # print("call actor")
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         delta_t = self.eqn_config.total_time_actor / self.eqn_config.num_time_interval_actor
