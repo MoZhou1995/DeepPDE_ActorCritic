@@ -917,8 +917,9 @@ class ekn(Equation):
     """Diffusive Eikonal equation"""
     def __init__(self, eqn_config):
         super(ekn, self).__init__(eqn_config)
-        self.k = eqn_config.k
-        self.epsl = 1/2/self.k/self.dim
+        self.a2 = eqn_config.a2
+        self.a3 = eqn_config.a3
+        self.epsl = 1/2/self.a2/self.dim
         self.sigma = np.sqrt(self.epsl) * np.sqrt(2.0)
         self.R = eqn_config.R
         
@@ -982,7 +983,7 @@ class ekn(Equation):
                 u = NN_control(x_i, training, need_grad=False)
             xi_norm_square = tf.reduce_sum(x_i**2,1,keepdims=True)
             xi_norm = tf.sqrt(xi_norm_square)
-            c = (2*self.k* xi_norm_square /self.dim - 1 + tf.math.exp(self.k*xi_norm_square)) / 2/self.k/xi_norm
+            c = 3 * (self.dim+1) * self.a3 / 2/self.a2 / self.dim / (2*self.a2 - 3*self.a3*xi_norm)
             delta_x = c*u * delta_t + self.sigma * dw_sample[:, :, i]
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
@@ -1013,7 +1014,7 @@ class ekn(Equation):
                 u = NN_control(x_i, training, need_grad=False)
             xi_norm_square = tf.reduce_sum(x_i**2,1,keepdims=True)
             xi_norm = tf.sqrt(xi_norm_square)
-            co = (2*self.k* xi_norm_square /self.dim - 1 + tf.math.exp(self.k*xi_norm_square)) / 2/self.k/xi_norm
+            co = 3 * (self.dim+1) * self.a3 / 2/self.a2 / self.dim / (2*self.a2 - 3*self.a3*xi_norm)
             delta_x_drift = co * u * delta_t
             delta_x_diffusion = self.sigma * dw_sample[:, :, i]
             delta_x = delta_x_drift + delta_x_diffusion
@@ -1098,7 +1099,7 @@ class ekn(Equation):
                 u = self.u_true(x_i)
             else:
                 u = NN_control(x_i, training, need_grad=False)
-            c = (2* xi_norm_square /self.dim - 1 + tf.math.exp(self.k*xi_norm_square)) / 2/self.k/xi_norm
+            c = 3 * (self.dim+1) * self.a3 / 2/self.a2 / self.dim / (2*self.a2 - 3*self.a3*xi_norm)
             delta_x = c*u*dt_i + self.sigma * dw_sample[:, :, i] * tf.sqrt(dt_i) / sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=True))
@@ -1133,7 +1134,8 @@ class ekn(Equation):
         return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x): #num_sample * 1
-        return tf.math.exp(-self.k * tf.reduce_sum(x**2, 1, keepdims=True)) - np.exp(-self.k * (self.R**2))
+        x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
+        return self.a3*x_norm**3 - self.a2 * x_norm**2 + self.a2 - self.a3
 
     def u_true(self, x): #num_sample * 1
         x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
