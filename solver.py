@@ -205,13 +205,12 @@ class CriticModel(tf.keras.Model):
         return delta, delta_bdry
 
 class ActorModel(tf.keras.Model):
-    #def __init__(self, config, bsde):
     def __init__(self, config, bsde):
         super(ActorModel, self).__init__()
         self.eqn_config = config.eqn_config
         self.net_config = config.net_config
         self.bsde = bsde
-        self.NN_control = DeepNN_polar(config, "actor")
+        self.NN_control = DeepNN(config, "actor")
         self.gamma = config.eqn_config.discount
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
@@ -225,7 +224,7 @@ class ActorModel(tf.keras.Model):
         discount = 1 #broadcast to num_sample x 1
         for t in range(self.eqn_config.num_time_interval_actor):
             if cheat_control == False:
-                w = self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False))
+                w = self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False) )
             else:
                 w = self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t]))
             #y = y + coef[:,t:t+1] * w * delta_t * discount

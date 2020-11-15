@@ -75,16 +75,12 @@ def main(argv):
     ax3 = f3.add_subplot(111)
     ax3.plot(theta,theta3,'bo', label='true_angle')
     plt.legend()
-    # f4 = plt.figure()
-    # ax4 = f4.add_subplot(111)
-    # ax4.plot(r,grad_y_norm,'ro', label='grad_y_|u|')
-    # plt.legend()
-    # f5 = plt.figure()#for angle of actor
-    # ax5 = f5.add_subplot(111)
-    # ax5.plot(theta,theta4,'ro', label='grad_y_angle')
-    # ax5 = f5.add_subplot(111)
-    # ax5.plot(theta,theta3,'bo', label='true_angle')
-    # plt.legend()
+    f4 = plt.figure()
+    plt.quiver(x[:,0],x[:,1],z[:,0],z[:,1])
+    plt.legend(["control field"])
+    f5 = plt.figure()
+    plt.quiver(x[:,0],x[:,1],true_z[:,0],true_z[:,1])
+    plt.legend(["true control field"])
     
     np.savetxt('{}_T{}_N{}_R{}.csv'.format(path_prefix,T,N,R),
                training_history,

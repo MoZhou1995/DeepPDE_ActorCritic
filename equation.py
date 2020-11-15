@@ -980,7 +980,7 @@ class ekn(Equation):
             if cheat:
                 u = self.u_true(x_i)
             else:
-                u = NN_control(x_i, training, need_grad=False)
+                u = NN_control(x_i, training, need_grad=False) #*0.9 + 0.1*self.u_true(x_i)
             xi_norm_square = tf.reduce_sum(x_i**2,1,keepdims=True)
             xi_norm = tf.sqrt(xi_norm_square)
             c = 3 * (self.dim+1) * self.a3 / 2/self.a2 / self.dim / (2*self.a2 - 3*self.a3*xi_norm)
