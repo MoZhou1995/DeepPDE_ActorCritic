@@ -1105,11 +1105,12 @@ class ekn(Equation):
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=True))
             temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
             new_flag = (np.ones([num_sample,1]) + tf.math.floor(temp/2)) * tf.sign(flag)
-            delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=True)
-            inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=True)
-            discriminant = inner_product ** 2 - delta_x_sqrnorm * (xi_norm_square - self.R ** 2)
-            # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
-            coef_i = tf.sign(new_flag) + tf.sign(flag) * (1 - tf.sign(new_flag) ) * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
+            # delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=True)
+            # inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=True)
+            # discriminant = inner_product ** 2 - delta_x_sqrnorm * (xi_norm_square - self.R ** 2)
+            # # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
+            # coef_i = tf.sign(new_flag) + tf.sign(flag) * (1 - tf.sign(new_flag) ) * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
+            coef_i = tf.sign(flag) * tf.sign(new_flag)
             if i==0:
                 coef = coef_i
                 dt = dt_i
@@ -1134,9 +1135,16 @@ class ekn(Equation):
         return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def V_true(self, x): #num_sample * 1
-        x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
-        return self.a3*x_norm**3 - self.a2 * x_norm**2 + self.a2 - self.a3
+        x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
+        # x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
+        return self.a3*x_norm**3 - self.a2 * x_norm**2# + self.a2 - self.a3
 
     def u_true(self, x): #num_sample * 1
-        x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
+        x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
+        # x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
         return x/x_norm
+    
+    def V_grad_true(self, x):
+        x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
+        # x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
+        return (3*self.a3*x_norm - 2*self.a2) * x
