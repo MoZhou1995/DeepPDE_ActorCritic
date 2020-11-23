@@ -1137,7 +1137,7 @@ class ekn(Equation):
     def V_true(self, x): #num_sample * 1
         x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
         # x_norm = tf.norm(x, ord='euclidean', axis=1, keepdims=True)
-        return self.a3*x_norm**3 - self.a2 * x_norm**2# + self.a2 - self.a3
+        return self.a3*x_norm**3 - self.a2 * x_norm**2 + self.a2 - self.a3
 
     def u_true(self, x): #num_sample * 1
         x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
