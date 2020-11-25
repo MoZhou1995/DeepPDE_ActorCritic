@@ -15,16 +15,22 @@
   },
   "net_config": {
     "num_hiddens_critic": [50, 50],
-    "num_hiddens_actor": [50, 50],
+    "num_hiddens_actor": [30, 30, 30],
     "lr_values_critic": [1e-3, 1e-4],
     "lr_boundaries_critic": [45000],
     "lr_values_actor": [1e-3, 1e-4],
     "lr_boundaries_actor": [45000],
-    "num_iterations": 1000,
+    "num_iterations": 2000,
     "batch_size": 256,
     "valid_size": 256,
     "logging_frequency": 100,
     "dtype": "float64",
     "verbose": true
+  },
+  "train_ops":{
+    "sample": "normal",
+    "scheme": "naive",
+    "TD": "TD3",
+    "train": "actor-critic"
   }
 }
