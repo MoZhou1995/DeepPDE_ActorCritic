@@ -1,17 +1,17 @@
 {
   "eqn_config": {
-    "_comment": "linear quadratic regulator",
-    "eqn_name": "LQR",
+    "_comment": "Van Der Pol oscillator",
+    "eqn_name": "VDP",
     "total_time_critic": 0.2,
     "total_time_actor": 0.2,
     "dim": 10,
-    "control_dim": 10,
+    "control_dim": 5,
     "num_time_interval_critic": 100,
     "num_time_interval_actor": 100,
-    "discount": 1.0,
-    "p": 1.0,
+    "discount": 1,
+    "a": 1,
+    "epsilon": 0.1,
     "q": 1.0,
-    "beta": 1.0,
     "R": 1.0
   },
   "net_config": {
@@ -30,7 +30,7 @@
   },
   "train_config":{
     "sample_type": "normal",
-    "scheme": "adapted",
+    "scheme": "naive",
     "TD_type": "TD3",
     "train": "actor-critic"
   }

@@ -27,10 +27,10 @@
     "dtype": "float64",
     "verbose": true
   },
-  "train_ops":{
-    "sample": "normal",
+  "train_config":{
+    "sample_type": "normal",
     "scheme": "naive",
-    "TD": "TD3",
+    "TD_type": "TD3",
     "train": "actor-critic"
   }
 }
