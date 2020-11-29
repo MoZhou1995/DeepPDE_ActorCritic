@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/lqr_d10.json',
+flags.DEFINE_string('config_path', 'configs/VDP_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'lqr_d10',
+flags.DEFINE_string('exp_name', 'VDP_d10',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -37,10 +37,10 @@ def main(argv):
     tf.keras.backend.set_floatx(config.net_config.dtype)
     dim = config.eqn_config.dim
     control_dim = config.eqn_config.control_dim
-    sample = config.train_ops.sample
-    scheme = config.train_ops.scheme
-    TD = config.train_ops.TD
-    train = config.train_ops.train
+    sample = config.train_config.sample_type
+    scheme = config.train_config.scheme
+    TD = config.train_config.TD_type
+    train = config.train_config.train
     
     if not os.path.exists(FLAGS.log_dir):
         os.mkdir(FLAGS.log_dir)
@@ -91,7 +91,7 @@ def main(argv):
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
-               header='step, loss_critic, loss_actor,true_loss_actor, err_value, err_control, error_cost,error_cost2, elapsed_time',
+               header='step, loss_critic, loss_actor,error_value_infty, err_value, err_control, err_value_grad,error_cost2, elapsed_time',
                comments='')
     figure_data = np.concatenate([x,y, true_y, z, true_z], axis=1)
     head = ("x,")*dim + "y_NN,y_true," + ("Z_NN,")*control_dim + "z_true" + (",z_true")*(control_dim-1)
