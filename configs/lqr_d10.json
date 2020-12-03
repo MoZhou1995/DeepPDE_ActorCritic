@@ -29,9 +29,9 @@
     "verbose": true
   },
   "train_config":{
-    "sample_type": "normal",
+    "sample_type": "bounded",
     "scheme": "adapted",
-    "TD_type": "TD3",
+    "TD_type": "TD1",
     "train": "actor-critic"
   }
 }
