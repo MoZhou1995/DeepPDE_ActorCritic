@@ -49,7 +49,6 @@ class Equation(object):
         
     def propagate_naive(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the most naive scheme, just stop where next step is out
-        # print("propagate_naive")
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
@@ -182,7 +181,6 @@ class Equation(object):
     
     def propagate_adapted(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the new scheme
-        # print("propagate_adapted")
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])

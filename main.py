@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/VDP_d10.json',
+flags.DEFINE_string('config_path', 'configs/lqr_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'VDP_d10',
+flags.DEFINE_string('exp_name', 'lqr_d10',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array

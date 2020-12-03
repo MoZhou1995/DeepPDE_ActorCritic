@@ -31,6 +31,13 @@ class ActorCriticSolver(object):
             self.sample = self.bsde.sample_normal
         if self.train_config.sample_type == "bounded":
             self.sample = self.bsde.sample_bounded
+        if self.train_config.train == "actor-critic":
+            self.cheat_value_in_actor = False
+            self.cheat_control_in_critic = False
+        elif self.train_config.train == "critic":
+            self.cheat_control_in_critic = True
+        elif self.train_config.train == "actor":
+            self.cheat_value_in_actor = True
          
     def train(self):
         start_time = time.time()
@@ -41,14 +48,6 @@ class ActorCriticSolver(object):
         true_loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=True, cheat_control=True).numpy()
         # begin sgd iteration
         for step in range(self.net_config.num_iterations+1):
-            if step == self.net_config.num_iterations:
-                x0, dw_sample, x_bdry = valid_data_critic
-                y = self.model_critic.NN_value(x0, training=False, need_grad=False)
-                true_y = self.bsde.V_true(x0)
-                grad_y = self.model_critic.NN_value_grad(x0, training=False, need_grad=False)
-                z = self.model_actor.NN_control(x0, training=False, need_grad=False)
-                true_z = self.bsde.u_true(x0)
-                print("true loss actor: ", true_loss_actor)
             if step % self.net_config.logging_frequency == 0:
                 loss_critic = self.loss_critic(valid_data_critic, training=False, cheat_control=False).numpy()
                 loss_actor = self.loss_actor(valid_data_actor, training=False, cheat_value=False, cheat_control=False).numpy()
@@ -63,6 +62,15 @@ class ActorCriticSolver(object):
                 if self.net_config.verbose:
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, error_value_infty: %.4e, err_value: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost2: %.4e, elapsed time: %3u" % (
                         step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost2, elapsed_time))
+            if step == self.net_config.num_iterations:
+                x0, dw_sample, x_bdry = valid_data_critic
+                y = self.model_critic.NN_value(x0, training=False, need_grad=False)
+                true_y = self.bsde.V_true(x0)
+                grad_y = self.model_critic.NN_value_grad(x0, training=False, need_grad=False)
+                z = self.model_actor.NN_control(x0, training=False, need_grad=False)
+                true_z = self.bsde.u_true(x0)
+                print("true loss actor: ", true_loss_actor)
+                training_history.append([0, 0.0, true_loss_actor, 0.0, 0.0, 0.0, 0.0, 0.0, elapsed_time])
             if self.train_config.train == "actor-critic" or self.train_config.train == "critic":
                 self.train_step_critic(self.sample(self.net_config.batch_size, self.eqn_config.num_time_interval_critic))
             if self.train_config.train == "actor-critic" or self.train_config.train == "actor":
@@ -97,20 +105,12 @@ class ActorCriticSolver(object):
 
     @tf.function
     def train_step_critic(self, train_data):
-        if self.train_config.train == "actor-critic":
-            cheat_control = False
-        if self.train_config.train == "critic":
-            cheat_control = True
-        grad = self.grad_critic(train_data, training=False, cheat_control=cheat_control)
+        grad = self.grad_critic(train_data, training=False, cheat_control=self.cheat_control_in_critic)
         self.optimizer_critic.apply_gradients(zip(grad, self.model_critic.trainable_variables))
         
     @tf.function
     def train_step_actor(self, train_data):
-        if self.train_config.train == "actor-critic":
-            cheat_value = False
-        if self.train_config.train == "actor":
-            cheat_value = True
-        grad = self.grad_actor(train_data, training=False, cheat_value=cheat_value, cheat_control=False)
+        grad = self.grad_actor(train_data, training=False, cheat_value=self.cheat_value_in_actor, cheat_control=False)
         self.optimizer_actor.apply_gradients(zip(grad, self.model_actor.trainable_variables))
         
     def err_value(self, inputs):
