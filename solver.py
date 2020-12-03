@@ -133,7 +133,7 @@ class ActorCriticSolver(object):
     
     def error_value_infty(self, inputs):
         x0, _, _ = inputs
-        error_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)))
+        error_value = self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)
         return tf.reduce_max(tf.abs(error_value))
     
     # def error_cost(self, inputs):
