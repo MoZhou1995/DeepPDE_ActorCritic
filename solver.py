@@ -319,8 +319,8 @@ class DeepNN(tf.keras.Model):
             if self.AC == "actor" and self.eqn == "ekn":
                 norm_y = tf.reduce_sum(y[:,0:self.d]**2, axis=1, keepdims=True)**0.5
                 y = y[:,0:self.d] / (0.000000000000001 + tf.nn.relu(y[:,self.d:self.d+1]) + norm_y)
-            if self.AC == "critic" and self.eqn == "ekn":
-                y = y - self.eqn_config.a2 + self.eqn_config.a3
+            # if self.AC == "critic" and self.eqn == "ekn":
+                # y = y - self.eqn_config.a2 + self.eqn_config.a3
         if self.AC == "critic" and need_grad:
             return y, g.gradient(y, x)
         else:
