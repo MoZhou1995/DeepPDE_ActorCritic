@@ -2,7 +2,7 @@
 The main file to run BSDE solver to solve parabolic partial differential equations (PDEs).
 sample: normal, bounded
 scheme: naive, intersection, kill, adapted
-TD: 1,2,3,4
+TD: TD1, TD2, TD3, TD4
 train: actor-critic, actor, critic
 """
 
@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/lqr_d10.json',
+flags.DEFINE_string('config_path', 'configs/lqr_d20.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'lqr_d10',
+flags.DEFINE_string('exp_name', 'lqr_d20',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
