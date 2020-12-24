@@ -313,7 +313,7 @@ class DeepNN(tf.keras.Model):
             for i in range(len(self.dense_layers) - 1):
                 y = self.dense_layers[i](y)
                 y = self.bn_layers[i+1](y, training)
-                y = tf.nn.relu(y)
+                y = y + tf.nn.relu(y)
             y = self.dense_layers[-1](y)
             y = self.bn_layers[-1](y, training)
             if self.AC == "actor" and self.eqn == "ekn":
