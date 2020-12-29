@@ -11,13 +11,18 @@ class Equation(object):
         self.control_dim = eqn_config.control_dim
         
     def sample_normal(self, num_sample, N): #normal sample for BM
-        x0 = np.zeros(shape=[0, self.dim])
-        while np.shape(x0)[0] < num_sample:
-            x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample*self.dim,self.dim])
-            index = np.where(self.b_np(x_Sample) < 0)
-            x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
-            if np.shape(x0)[0] > num_sample:
-                x0 = x0[0:num_sample,:]
+        # x0 = np.zeros(shape=[0, self.dim])
+        # while np.shape(x0)[0] < num_sample:
+        #     x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample*self.dim,self.dim])
+        #     index = np.where(self.b_np(x_Sample) < 0)
+        #     x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
+        #     if np.shape(x0)[0] > num_sample:
+        #         x0 = x0[0:num_sample,:]
+        r_Sample = np.random.uniform(low=0, high=self.R, size=[num_sample,1])
+        r = r_Sample**(1 / self.dim) * (self.R**((self.dim- 1) / self.dim ))
+        angle = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(angle**2, 1, keepdims=True))
+        x0 = r * angle / norm
         dw_sample = normal.rvs(size=[num_sample, self.dim, N])# * sqrt_delta_t
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
