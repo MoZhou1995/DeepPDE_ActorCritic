@@ -8,14 +8,14 @@
     "control_dim": 5,
     "num_time_interval_critic": 50,
     "num_time_interval_actor": 50,
-    "discount": 0.75,
+    "discount": 1.0,
     "p": 1.0,
-    "q": 1.5,
+    "q": 1.0,
     "beta": 1.0,
     "R": 1.0
   },
   "net_config": {
-    "num_hiddens_critic": [200, 200],
+    "num_hiddens_critic": [100, 100],
     "num_hiddens_actor": [100, 100],
     "lr_values_critic": [1e-3, 1e-4, 1e-5],
     "lr_boundaries_critic": [20000, 30000],
@@ -31,7 +31,7 @@
   "train_config":{
     "sample_type": "normal",
     "scheme": "adapted",
-    "TD_type": "TD3",
+    "TD_type": "TD1",
     "train": "actor-critic"
   }
 }
