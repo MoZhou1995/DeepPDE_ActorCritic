@@ -14,8 +14,8 @@
     "R": 1.0
   },
   "net_config": {
-    "num_hiddens_critic": [80, 80],
-    "num_hiddens_actor": [80, 80],
+    "num_hiddens_critic": [100, 100],
+    "num_hiddens_actor": [100, 100],
     "lr_values_critic": [1e-3, 1e-4, 1e-5],
     "lr_boundaries_critic": [10000, 15000],
     "lr_values_actor": [1e-3, 1e-4, 1e-5],
@@ -29,8 +29,8 @@
   },
   "train_config":{
     "sample_type": "normal",
-    "scheme": "naive",
-    "TD_type": "TD3",
+    "scheme": "adapted",
+    "TD_type": "TD1",
     "train": "actor-critic"
   }
 }

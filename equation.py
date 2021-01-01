@@ -192,7 +192,7 @@ class Equation(object):
         x_i = x0
         x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
         #temp: 2 for inside (inner); 0 (and 1) for middle layer; -2 (and -1) for boundary or outside
-        temp = tf.sign(self.R - x0_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
+        temp = tf.sign(self.R - x0_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
         #flag: 2 for inside; 1 for middle layer, which means step size need modification; 0 means boundary, but we will move for at least a first step.
         flag = np.ones([num_sample]) + tf.math.floor(temp/2)
         for i in range(N):
@@ -205,7 +205,7 @@ class Equation(object):
             delta_x = self.drift(x_i, u_i) * tf.reshape(dt_i, [num_sample,1]) + self.diffusion(x_i, dw_sample[:, :, i]) * tf.reshape(tf.sqrt(dt_i), [num_sample,1])
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
-            temp = tf.sign(self.R - x_iPlus1_temp_norm - np.sqrt(6 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
             new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
             # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
             coef_i = tf.sign(flag) * tf.sign(new_flag)
