@@ -21,9 +21,9 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/lqr_d20.json',
+flags.DEFINE_string('config_path', 'configs/ekn_d10.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'lqr_d20',
+flags.DEFINE_string('exp_name', 'ekn_d10',
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
@@ -63,6 +63,7 @@ def main(argv):
     # theta3 = np.arctan(true_z[:,1]/true_z[:,0])
     # theta4 = np.arctan(grad_y[:,1]/grad_y[:,0])
     # u_norm = np.sqrt(np.sum(np.square(z), 1, keepdims=False))
+    # u_true_norm = np.sqrt(np.sum(np.square(true_z), 1, keepdims=False))
     # grad_y_norm = np.sqrt(np.sum(np.square(grad_y), 1, keepdims=False))
     # f1 = plt.figure()
     # ax1 = f1.add_subplot(111)
@@ -72,6 +73,7 @@ def main(argv):
     # f2 = plt.figure()
     # ax2 = f2.add_subplot(111)
     # ax2.plot(r,u_norm,'ro', label='control_r_|u|')
+    # ax2.plot(r,u_true_norm,'bo', label='true_control_r_|u|')
     # plt.legend()
     # f3 = plt.figure()#for angle of actor
     # ax3 = f3.add_subplot(111)

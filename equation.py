@@ -184,6 +184,46 @@ class Equation(object):
         dt = np.ones([num_sample,N]) * delta_t
         return x_smp, dt, coef
     
+    # def propagate_adapted(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
+    #     # the new scheme
+    #     delta_t = T / N
+    #     sqrt_delta_t = np.sqrt(delta_t)
+    #     x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
+    #     x_i = x0
+    #     x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
+    #     #temp: 2 for inside (inner); 0 (and 1) for middle layer; -2 (and -1) for boundary or outside
+    #     temp = tf.sign(self.R - x0_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
+    #     #flag: 2 for inside; 1 for middle layer, which means step size need modification; 0 means boundary, but we will move for at least a first step.
+    #     flag = np.ones([num_sample]) + tf.math.floor(temp/2)
+    #     for i in range(N):
+    #         xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
+    #         dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
+    #         if cheat:
+    #             u_i = self.u_true(x_i)
+    #         else:
+    #             u_i = NN_control(x_i, training, need_grad=False)
+    #         delta_x = self.drift(x_i, u_i) * tf.reshape(dt_i, [num_sample,1]) + self.diffusion(x_i, dw_sample[:, :, i]) * tf.reshape(tf.sqrt(dt_i), [num_sample,1])
+    #         x_iPlus1_temp = x_i + delta_x
+    #         x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
+    #         temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
+    #         new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
+    #         # delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
+    #         # inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
+    #         # discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
+    #         # # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
+    #         # coef_i = tf.sign(new_flag) + tf.sign(flag) * (1 - tf.sign(new_flag) ) * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
+    #         coef_i = tf.sign(flag) * tf.sign(new_flag)
+    #         if i==0:
+    #             coef = tf.reshape(coef_i, [num_sample, 1])
+    #             dt = tf.reshape(dt_i, [num_sample, 1])
+    #         else:
+    #             coef = tf.concat([coef, tf.reshape(coef_i, [num_sample, 1])], axis=1)
+    #             dt = tf.concat([dt, tf.reshape(dt_i, [num_sample, 1])], axis=1)
+    #         x_i = x_i + delta_x * tf.reshape(coef_i, [num_sample,1])
+    #         x_smp = tf.concat([x_smp, tf.reshape(x_i, [num_sample, self.dim, 1])], axis=2)
+    #         flag = new_flag
+    #     return x_smp, dt, coef
+    
     def propagate_adapted(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the new scheme
         delta_t = T / N
@@ -191,13 +231,14 @@ class Equation(object):
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
-        #temp: 2 for inside (inner); 0 (and 1) for middle layer; -2 (and -1) for boundary or outside
-        temp = tf.sign(self.R - x0_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm - (delta_t**2))
-        #flag: 2 for inside; 1 for middle layer, which means step size need modification; 0 means boundary, but we will move for at least a first step.
+        #temp: 2 for inside (inner); 0 (and 1) for boundary layer; -2 (and -1) for outside
+        temp = tf.sign(self.R - x0_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm)
+        #flag: 2 for inside; 1 means step size need modification; 0 means boundary, but we will move for at least a first step.
         flag = np.ones([num_sample]) + tf.math.floor(temp/2)
         for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
             dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
+            dt_i = tf.max(dt_i, delta_t**2)
             if cheat:
                 u_i = self.u_true(x_i)
             else:
@@ -205,9 +246,13 @@ class Equation(object):
             delta_x = self.drift(x_i, u_i) * tf.reshape(dt_i, [num_sample,1]) + self.diffusion(x_i, dw_sample[:, :, i]) * tf.reshape(tf.sqrt(dt_i), [num_sample,1])
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
-            temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm - (delta_t**2))
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm)
             new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
-            # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
+            # delta_x_sqrnorm = tf.reduce_sum(delta_x**2, 1, keepdims=False)
+            # inner_product = tf.reduce_sum(delta_x * x_i, 1, keepdims=False)
+            # discriminant = inner_product ** 2 - delta_x_sqrnorm * (tf.reduce_sum(x_i**2,1,keepdims=False)- self.R ** 2)
+            # # if flag=0, then new_flag=0, coef=0, outside; if new_flag>0, then coef=1; else, coef is in (0,1) 
+            # coef_i = tf.sign(new_flag) + tf.sign(flag) * (1 - tf.sign(new_flag) ) * (tf.sqrt(tf.abs(discriminant)) - inner_product) / delta_x_sqrnorm
             coef_i = tf.sign(flag) * tf.sign(new_flag)
             if i==0:
                 coef = tf.reshape(coef_i, [num_sample, 1])
