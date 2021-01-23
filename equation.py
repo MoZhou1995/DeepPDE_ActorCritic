@@ -238,7 +238,7 @@ class Equation(object):
         for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
             dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3*self.dim) + (flag**2 - 2*flag + 1) * delta_t
-            dt_i = tf.max(dt_i, delta_t**2)
+            dt_i = tf.maximum(dt_i, delta_t**2)
             if cheat:
                 u_i = self.u_true(x_i)
             else:
