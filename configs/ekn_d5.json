@@ -14,13 +14,13 @@
     "R": 1.0
   },
   "net_config": {
-    "num_hiddens_critic": [100, 100],
+    "num_hiddens_critic": [200, 200],
     "num_hiddens_actor": [100, 100],
     "lr_values_critic": [1e-3, 1e-4, 1e-5],
-    "lr_boundaries_critic": [10000, 15000],
+    "lr_boundaries_critic": [20000, 30000],
     "lr_values_actor": [1e-3, 1e-4, 1e-5],
-    "lr_boundaries_actor": [10000, 15000],
-    "num_iterations": 20000,
+    "lr_boundaries_actor": [20000, 30000],
+    "num_iterations":40000,
     "batch_size": 1024,
     "valid_size": 1024,
     "logging_frequency": 100,
