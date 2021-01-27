@@ -15,7 +15,7 @@
   },
   "net_config": {
     "num_hiddens_critic": [200, 200],
-    "num_hiddens_actor": [100, 100],
+    "num_hiddens_actor": [200, 200],
     "lr_values_critic": [1e-3, 1e-4, 1e-5],
     "lr_boundaries_critic": [20000, 30000],
     "lr_values_actor": [1e-3, 1e-4, 1e-5],
