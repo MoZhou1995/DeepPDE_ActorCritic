@@ -180,16 +180,21 @@ class CriticModel(tf.keras.Model):
                 delta_y_diffusion = self.bsde.sigma * tf.reduce_sum(self.NN_value_grad(x[:,:,t], training, need_grad=False) * dw[:,:,t], 1, keepdims=True)
                 delta_y_diffusion *= discount 
                 #coef for diffusion
-                if self.train_config.scheme == "adapted":
-                    delta_y_diffusion_coef = coef[:,t:t+1] * tf.sqrt(dt[:,t:t+1])
-                elif self.train_config.scheme == "naive":
-                    delta_y_diffusion_coef = coef[:,t:t+1] * sqrt_delta_t
+                delta_y_diffusion_coef = coef[:,t:t+1] * tf.sqrt(dt[:,t:t+1])
                 y -= delta_y_diffusion * delta_y_diffusion_coef
             
-            #we need to update the discount
-            discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
+            # for TD1 and TD2 we need to update the discount
+            if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2": #then we need to compute discount
+                discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
             
-        delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
+        if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2":
+            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
+        else:
+            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
+        # when you want everything true
+        # delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
+        # pure cheat
+        # delta = self.NN_value(x0, training, need_grad=False) - self.bsde.V_true(x0)
         delta_bdry = self.NN_value(x_bdry, training, need_grad=False) - self.bsde.Z_tf(x_bdry)
         return delta, delta_bdry
 
@@ -206,6 +211,10 @@ class ActorModel(tf.keras.Model):
             self.propagate = self.bsde.propagate_naive
         elif self.train_config.scheme == "adapted":
             self.propagate = self.bsde.propagate_adapted
+        elif self.train_config.scheme == "intersection":
+            self.propagate = self.bsde.propagate_intersection
+        elif self.train_config.scheme == "kill":
+            self.propagate = self.bsde.propagate_kill
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
         x0, dw, x_bdry = inputs
@@ -213,11 +222,16 @@ class ActorModel(tf.keras.Model):
         y = 0
         x, dt, coef = self.propagate(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor, cheat_control)
         discount = 1 #broadcast to num_sample x 1
+        # if cheat_control:
+        #     control = self.bsde.u_true
+        # else:
+        #     control = self.NN_control(_, training, need_grad=False)
         for t in range(self.eqn_config.num_time_interval_actor):
             if cheat_control == False:
                 w = self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False) )
             else:
                 w = self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t]))
+            # w = self.bsde.w_tf(x[:,:,t], control(x[:,:,t]))
             y = y + coef[:,t:t+1] * w * dt[:,t:t+1] * discount
             discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
         if cheat_value == False:
@@ -261,7 +275,7 @@ class DeepNN(tf.keras.Model):
             self.dense_layers.append(tf.keras.layers.Dense(self.d, activation=None))
 
     def call(self, x, training, need_grad):
-        """structure: bn -> (dense -> bn -> relu + Id) * len(num_hiddens) -> dense -> bn"""
+        """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
         with tf.GradientTape() as g:
             if self.AC == "critic" and need_grad:
                 g.watch(x)
@@ -275,6 +289,8 @@ class DeepNN(tf.keras.Model):
             if self.AC == "actor" and self.eqn == "ekn":
                 norm_y = tf.reduce_sum(y[:,0:self.d]**2, axis=1, keepdims=True)**0.5
                 y = y[:,0:self.d] / (0.000000000000001 + tf.nn.relu(y[:,self.d:self.d+1]) + norm_y)
+            # if self.AC == "critic" and self.eqn == "ekn":
+                # y = y - self.eqn_config.a2 + self.eqn_config.a3
         if self.AC == "critic" and need_grad:
             return y, g.gradient(y, x)
         else:
