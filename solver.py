@@ -3,13 +3,7 @@ import time
 import numpy as np
 import tensorflow as tf
 DELTA_CLIP = 50.0
-'''
-always care: what sample for two validations and two trainings (normal or bdd),
-how do we propagate (naive, intersection, kill diffusion, step size adapted)
-what TD do we use (4 kinds)
-are we training both actor and critic or jusr one of them
-if we need to cheat e.g. valid loss_actor, propagate, TD scheme, train step actor
-'''
+
 class ActorCriticSolver(object):
     """The fully connected neural network model."""
     def __init__(self, config, bsde):
@@ -55,13 +49,12 @@ class ActorCriticSolver(object):
                 err_control = self.err_control(valid_data_actor).numpy()
                 err_value_grad = self.err_value_grad(valid_data_critic).numpy()
                 error_value_infty = self.error_value_infty(valid_data_critic).numpy()
-                # error_cost = self.error_cost(valid_data_cost).numpy()
-                error_cost2 = self.error_cost2(valid_data_cost).numpy()
+                error_cost = self.error_cost(valid_data_cost).numpy()
                 elapsed_time = time.time() - start_time
-                training_history.append([step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost2, elapsed_time])
+                training_history.append([step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost, elapsed_time])
                 if self.net_config.verbose:
-                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, error_value_infty: %.4e, err_value: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost2: %.4e, elapsed time: %3u" % (
-                        step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost2, elapsed_time))
+                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, error_value_infty: %.4e, err_value: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost: %.4e, elapsed time: %3u" % (
+                        step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost, elapsed_time))
             if step == self.net_config.num_iterations:
                 x0, dw_sample, x_bdry = valid_data_critic
                 y = self.model_critic.NN_value(x0, training=False, need_grad=False)
@@ -136,13 +129,7 @@ class ActorCriticSolver(object):
         error_value = self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)
         return tf.reduce_max(tf.abs(error_value))
     
-    # def error_cost(self, inputs):
-    #     x0, _, _ = inputs
-    #     y = self.model_actor(inputs, self.model_critic, training=False, cheat_value=True, cheat_control=False)
-    #     y_true = self.bsde.V_true(x0)
-    #     return tf.reduce_mean(y-y_true)
-    
-    def error_cost2(self, inputs):
+    def error_cost(self, inputs):
         x0, _, _ = inputs
         y = self.model_actor(inputs, self.model_critic, training=False, cheat_value=False, cheat_control=False)
         y0 = self.model_critic.NN_value(x0, training=False, need_grad=False)
@@ -162,14 +149,6 @@ class CriticModel(tf.keras.Model):
             self.propagate = self.bsde.propagate_naive
         elif self.train_config.scheme == "adapted":
             self.propagate = self.bsde.propagate_adapted
-        elif self.train_config.scheme == "intersection":
-            self.propagate = self.bsde.propagate_intersection
-        elif self.train_config.scheme == "kill":
-            self.propagate = self.bsde.propagate_kill
-        # if self.train_config.train == "critic":
-        #     self.cheat_control = True
-        # else:
-        #     self.cheat_control = False
         
     def control(self, x, cheat_control, model_actor):
         if cheat_control == False:
@@ -189,42 +168,28 @@ class CriticModel(tf.keras.Model):
             u = self.control(x[:,:,t], cheat_control, model_actor) #this is the control we use
             w = self.bsde.w_tf(x[:,:,t],u) # running cost
             #integrand for drift
-            if self.train_config.TD_type == "TD3" or self.train_config.TD_type == "TD4":
-                delta_y_drift = w - self.gamma * self.NN_value(x[:,:,t], training, need_grad=False)
-            else:
-                delta_y_drift = w * discount
+            delta_y_drift = w * discount
             #coef for drift
             delta_y_drift_coef = coef[:,t:t+1] * dt[:,t:t+1]
             # update the drift
             y += delta_y_drift * delta_y_drift_coef
             
-            # For TD1 and TD3 we need to consider diffusion
-            if self.train_config.TD_type == "TD3" or self.train_config.TD_type == "TD1":
+            # For TD1 we need to consider diffusion
+            if self.train_config.TD_type == "TD1":
                 #integrand for diffusion
                 delta_y_diffusion = self.bsde.sigma * tf.reduce_sum(self.NN_value_grad(x[:,:,t], training, need_grad=False) * dw[:,:,t], 1, keepdims=True)
-                if self.train_config.TD_type == "TD1":
-                    delta_y_diffusion *= discount 
+                delta_y_diffusion *= discount 
                 #coef for diffusion
                 if self.train_config.scheme == "adapted":
                     delta_y_diffusion_coef = coef[:,t:t+1] * tf.sqrt(dt[:,t:t+1])
-                elif self.train_config.scheme == "naive" or self.train_config.scheme == "intersection":
+                elif self.train_config.scheme == "naive":
                     delta_y_diffusion_coef = coef[:,t:t+1] * sqrt_delta_t
-                else:
-                    delta_y_diffusion_coef = coef[:,t:t+1]**0.5 * sqrt_delta_t
                 y -= delta_y_diffusion * delta_y_diffusion_coef
             
-            # for TD1 and TD2 we need to update the discount
-            if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2": #then we need to compute discount
-                discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
+            #we need to update the discount
+            discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
             
-        if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2":
-            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
-        else:
-            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
-        # when you want everything true
-        # delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
-        # pure cheat
-        # delta = self.NN_value(x0, training, need_grad=False) - self.bsde.V_true(x0)
+        delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
         delta_bdry = self.NN_value(x_bdry, training, need_grad=False) - self.bsde.Z_tf(x_bdry)
         return delta, delta_bdry
 
@@ -241,10 +206,6 @@ class ActorModel(tf.keras.Model):
             self.propagate = self.bsde.propagate_naive
         elif self.train_config.scheme == "adapted":
             self.propagate = self.bsde.propagate_adapted
-        elif self.train_config.scheme == "intersection":
-            self.propagate = self.bsde.propagate_intersection
-        elif self.train_config.scheme == "kill":
-            self.propagate = self.bsde.propagate_kill
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
         x0, dw, x_bdry = inputs
@@ -252,16 +213,11 @@ class ActorModel(tf.keras.Model):
         y = 0
         x, dt, coef = self.propagate(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor, cheat_control)
         discount = 1 #broadcast to num_sample x 1
-        # if cheat_control:
-        #     control = self.bsde.u_true
-        # else:
-        #     control = self.NN_control(_, training, need_grad=False)
         for t in range(self.eqn_config.num_time_interval_actor):
             if cheat_control == False:
                 w = self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False) )
             else:
                 w = self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t]))
-            # w = self.bsde.w_tf(x[:,:,t], control(x[:,:,t]))
             y = y + coef[:,t:t+1] * w * dt[:,t:t+1] * discount
             discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
         if cheat_value == False:
@@ -305,7 +261,7 @@ class DeepNN(tf.keras.Model):
             self.dense_layers.append(tf.keras.layers.Dense(self.d, activation=None))
 
     def call(self, x, training, need_grad):
-        """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
+        """structure: bn -> (dense -> bn -> relu + Id) * len(num_hiddens) -> dense -> bn"""
         with tf.GradientTape() as g:
             if self.AC == "critic" and need_grad:
                 g.watch(x)
@@ -319,8 +275,6 @@ class DeepNN(tf.keras.Model):
             if self.AC == "actor" and self.eqn == "ekn":
                 norm_y = tf.reduce_sum(y[:,0:self.d]**2, axis=1, keepdims=True)**0.5
                 y = y[:,0:self.d] / (0.000000000000001 + tf.nn.relu(y[:,self.d:self.d+1]) + norm_y)
-            # if self.AC == "critic" and self.eqn == "ekn":
-                # y = y - self.eqn_config.a2 + self.eqn_config.a3
         if self.AC == "critic" and need_grad:
             return y, g.gradient(y, x)
         else:
