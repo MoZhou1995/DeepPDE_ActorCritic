@@ -183,18 +183,10 @@ class CriticModel(tf.keras.Model):
                 delta_y_diffusion_coef = coef[:,t:t+1] * tf.sqrt(dt[:,t:t+1])
                 y -= delta_y_diffusion * delta_y_diffusion_coef
             
-            # for TD1 and TD2 we need to update the discount
-            if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2": #then we need to compute discount
-                discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
+            # we need to update the discount
+            discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
             
-        if self.train_config.TD_type == "TD1" or self.train_config.TD_type == "TD2":
-            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
-        else:
-            delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False)
-        # when you want everything true
-        # delta = self.bsde.V_true(x[:,:,0]) - y - self.bsde.V_true(x[:,:,-1])
-        # pure cheat
-        # delta = self.NN_value(x0, training, need_grad=False) - self.bsde.V_true(x0)
+        delta = self.NN_value(x[:,:,0], training, need_grad=False) - y - self.NN_value(x[:,:,-1], training, need_grad=False) * discount
         delta_bdry = self.NN_value(x_bdry, training, need_grad=False) - self.bsde.Z_tf(x_bdry)
         return delta, delta_bdry
 
