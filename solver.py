@@ -214,16 +214,11 @@ class ActorModel(tf.keras.Model):
         y = 0
         x, dt, coef = self.propagate(num_sample, x0, dw, self.NN_control, training, self.eqn_config.total_time_actor, self.eqn_config.num_time_interval_actor, cheat_control)
         discount = 1 #broadcast to num_sample x 1
-        # if cheat_control:
-        #     control = self.bsde.u_true
-        # else:
-        #     control = self.NN_control(_, training, need_grad=False)
         for t in range(self.eqn_config.num_time_interval_actor):
             if cheat_control == False:
                 w = self.bsde.w_tf(x[:,:,t], self.NN_control(x[:,:,t], training, need_grad=False) )
             else:
                 w = self.bsde.w_tf(x[:,:,t], self.bsde.u_true(x[:,:,t]))
-            # w = self.bsde.w_tf(x[:,:,t], control(x[:,:,t]))
             y = y + coef[:,t:t+1] * w * dt[:,t:t+1] * discount
             discount *= tf.math.exp(-self.gamma * dt[:,t:t+1] * coef[:,t:t+1])
         if cheat_value == False:
@@ -281,8 +276,6 @@ class DeepNN(tf.keras.Model):
             if self.AC == "actor" and self.eqn == "ekn":
                 norm_y = tf.reduce_sum(y[:,0:self.d]**2, axis=1, keepdims=True)**0.5
                 y = y[:,0:self.d] / (0.000000000000001 + tf.nn.relu(y[:,self.d:self.d+1]) + norm_y)
-            # if self.AC == "critic" and self.eqn == "ekn":
-                # y = y - self.eqn_config.a2 + self.eqn_config.a3
         if self.AC == "critic" and need_grad:
             return y, g.gradient(y, x)
         else:
