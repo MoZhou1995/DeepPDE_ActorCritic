@@ -1,9 +1,5 @@
 """
 The main file to run BSDE solver to solve parabolic partial differential equations (PDEs).
-sample: normal, bounded
-scheme: naive, intersection, kill, adapted
-TD: TD1, TD2, TD3, TD4
-train: actor-critic, actor, critic
 """
 
 import json
