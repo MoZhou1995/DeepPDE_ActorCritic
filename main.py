@@ -17,15 +17,17 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/ekn_d10.json',
+flags.DEFINE_string('config_path', 'configs/vdp_d4.json',
                     """The path to load json file.""")
-flags.DEFINE_string('exp_name', 'ekn_d10',
+flags.DEFINE_string('exp_name', None,
                     """The name of numerical experiments, prefix for logging""")
 FLAGS = flags.FLAGS
 FLAGS.log_dir = './logs'  # directory where to write event logs and output array
 
 def main(argv):
     del argv
+    if FLAGS.exp_name is None: # use config name as exp_name
+        FLAGS.exp_name = os.path.splitext(os.path.basename(FLAGS.config_path))[0]
     with open(FLAGS.config_path) as json_data_file:
         config = json.load(json_data_file)
     config = munch.munchify(config)
