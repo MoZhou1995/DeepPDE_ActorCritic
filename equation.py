@@ -70,7 +70,7 @@ class Equation(object):
         dt = np.ones([num_sample,N]) * delta_t
         return x_smp, dt, coef
     
-    def propagate_adapted(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
+    def propagate_adaptive(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the new scheme
         delta_t = T / N
         sqrt_delta_t = np.sqrt(delta_t)

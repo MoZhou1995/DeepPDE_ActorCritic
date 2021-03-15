@@ -147,8 +147,8 @@ class CriticModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         if self.train_config.scheme == "naive":
             self.propagate = self.bsde.propagate_naive
-        elif self.train_config.scheme == "adapted":
-            self.propagate = self.bsde.propagate_adapted
+        elif self.train_config.scheme == "adaptive":
+            self.propagate = self.bsde.propagate_adaptive
         
     def control(self, x, cheat_control, model_actor):
         if cheat_control == False:
@@ -201,8 +201,8 @@ class ActorModel(tf.keras.Model):
         self.gamma = config.eqn_config.discount
         if self.train_config.scheme == "naive":
             self.propagate = self.bsde.propagate_naive
-        elif self.train_config.scheme == "adapted":
-            self.propagate = self.bsde.propagate_adapted
+        elif self.train_config.scheme == "adaptive":
+            self.propagate = self.bsde.propagate_adaptive
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
         x0, dw, x_bdry = inputs
