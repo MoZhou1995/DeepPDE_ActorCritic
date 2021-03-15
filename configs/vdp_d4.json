@@ -30,7 +30,7 @@
   },
   "train_config":{
     "sample_type": "normal",
-    "scheme": "naive",
+    "scheme": "adaptive",
     "TD_type": "TD1",
     "train": "actor-critic"
   }
