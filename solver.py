@@ -160,7 +160,6 @@ class CriticModel(tf.keras.Model):
         x0, dw, x_bdry = inputs
         num_sample = np.shape(dw)[0]
         delta_t = self.eqn_config.total_time_critic / self.eqn_config.num_time_interval_critic
-        sqrt_delta_t = np.sqrt(delta_t)
         y = 0
         discount = 1 #broadcast to num_sample x 1
         x, dt, coef = self.propagate(num_sample, x0, dw, model_actor.NN_control, training, self.eqn_config.total_time_critic, self.eqn_config.num_time_interval_critic, cheat_control)
