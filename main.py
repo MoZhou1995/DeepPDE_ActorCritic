@@ -60,7 +60,7 @@ def main(argv):
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
                delimiter=",",
-               header='step, loss_critic, loss_actor,error_value_infty, err_value, err_control, err_value_grad,error_cost2, elapsed_time',
+               header='step, loss_critic, loss_actor, err_value, error_value_infty, err_control, err_value_grad,error_cost2, elapsed_time',
                comments='')
     figure_data = np.concatenate([x,y, true_y, z, true_z], axis=1)
     head = ("x,")*dim + "y_NN,y_true," + ("Z_NN,")*control_dim + "z_true" + (",z_true")*(control_dim-1)

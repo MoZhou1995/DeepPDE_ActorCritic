@@ -48,13 +48,13 @@ class ActorCriticSolver(object):
                 err_value = self.err_value(valid_data_critic).numpy()
                 err_control = self.err_control(valid_data_actor).numpy()
                 err_value_grad = self.err_value_grad(valid_data_critic).numpy()
-                error_value_infty = self.error_value_infty(valid_data_critic).numpy()
-                error_cost = self.error_cost(valid_data_cost).numpy()
+                err_value_infty = self.err_value_infty(valid_data_critic).numpy()
+                err_cost = self.err_cost(valid_data_cost).numpy()
                 elapsed_time = time.time() - start_time
-                training_history.append([step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost, elapsed_time])
+                training_history.append([step, loss_critic, loss_actor, err_value_infty, err_value, err_control, err_value_grad, err_cost, elapsed_time])
                 if self.net_config.verbose:
-                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, error_value_infty: %.4e, err_value: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost: %.4e, elapsed time: %3u" % (
-                        step, loss_critic, loss_actor, error_value_infty, err_value, err_control, err_value_grad, error_cost, elapsed_time))
+                    logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_value_infty: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost: %.4e, elapsed time: %3u" % (
+                        step, loss_critic, loss_actor, err_value, err_value_infty, err_control, err_value_grad, err_cost, elapsed_time))
             if step == self.net_config.num_iterations:
                 x0, dw_sample, x_bdry = valid_data_critic
                 y = self.model_critic.NN_value(x0, training=False, need_grad=False)
@@ -108,28 +108,28 @@ class ActorCriticSolver(object):
         
     def err_value(self, inputs):
         x0, _, _ = inputs
-        error_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)))
+        err_value = tf.reduce_sum(tf.square(self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.V_true(x0)))
-        return tf.sqrt(error_value / norm)
+        return tf.sqrt(err_value / norm)
     
     def err_control(self, inputs):
         x0, _, _ = inputs
-        error_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
+        err_control = tf.reduce_sum(tf.square(self.bsde.u_true(x0) - self.model_actor.NN_control(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.u_true(x0)))
-        return tf.sqrt(error_control / norm)
+        return tf.sqrt(err_control / norm)
         
     def err_value_grad(self, inputs):
         x0, _, _ = inputs
-        error_value_grad = tf.reduce_sum(tf.square(self.bsde.V_grad_true(x0) - self.model_critic.NN_value_grad(x0, training=False, need_grad=False)))
+        err_value_grad = tf.reduce_sum(tf.square(self.bsde.V_grad_true(x0) - self.model_critic.NN_value_grad(x0, training=False, need_grad=False)))
         norm = tf.reduce_sum(tf.square(self.bsde.V_grad_true(x0)))
-        return tf.sqrt(error_value_grad / norm)
+        return tf.sqrt(err_value_grad / norm)
     
-    def error_value_infty(self, inputs):
+    def err_value_infty(self, inputs):
         x0, _, _ = inputs
-        error_value = self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)
-        return tf.reduce_max(tf.abs(error_value))
+        err_value = self.bsde.V_true(x0) - self.model_critic.NN_value(x0, training=False, need_grad=False)
+        return tf.reduce_max(tf.abs(err_value))
     
-    def error_cost(self, inputs):
+    def err_cost(self, inputs):
         x0, _, _ = inputs
         y = self.model_actor(inputs, self.model_critic, training=False, cheat_value=False, cheat_control=False)
         y0 = self.model_critic.NN_value(x0, training=False, need_grad=False)
@@ -203,10 +203,6 @@ class ActorModel(tf.keras.Model):
             self.propagate = self.bsde.propagate_naive
         elif self.train_config.scheme == "adapted":
             self.propagate = self.bsde.propagate_adapted
-        elif self.train_config.scheme == "intersection":
-            self.propagate = self.bsde.propagate_intersection
-        elif self.train_config.scheme == "kill":
-            self.propagate = self.bsde.propagate_kill
         
     def call(self, inputs, model_critic, training, cheat_value, cheat_control):
         x0, dw, x_bdry = inputs

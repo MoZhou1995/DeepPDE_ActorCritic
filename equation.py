@@ -23,21 +23,19 @@ class Equation(object):
         return x0, dw_sample, x_bdry
     
     def sample_bounded(self, num_sample, N): #bdd sample for BM
-        x0 = np.zeros(shape=[0, self.dim])
-        while np.shape(x0)[0] < num_sample:
-            x_Sample = np.random.uniform(low=-self.R, high=self.R, size=[num_sample,self.dim])
-            index = np.where(self.b_np(x_Sample) < 0)
-            x0 = np.concatenate([x0, x_Sample[index[0],:]], axis=0)
-            if np.shape(x0)[0] > num_sample:
-                x0 = x0[0:num_sample,:]
+        r_Sample = np.random.uniform(low=0, high=self.R, size=[num_sample,1])
+        r = r_Sample**(1 / self.dim) * (self.R**((self.dim- 1) / self.dim ))
+        angle = normal.rvs(size=[num_sample, self.dim])
+        norm = np.sqrt(np.sum(angle**2, 1, keepdims=True))
+        x0 = r * angle / norm
         dw_sample = np.random.randint(6,size=[num_sample, self.dim, N])
-        dw_sample = np.floor((dw_sample - 1)/4) * np.sqrt(3.0) #* sqrt_delta_t)
+        dw_sample = np.floor((dw_sample - 1)/4) * np.sqrt(3.0) 
         x_bdry = normal.rvs(size=[num_sample, self.dim])
         norm = np.sqrt(np.sum(np.square(x_bdry), 1, keepdims=True))
         x_bdry = self.R * x_bdry / norm
         return x0, dw_sample, x_bdry
     
-    def sample0(self, num_sample, N): #bdd sample for BM
+    def sample0(self, num_sample, N):
         x0 = np.zeros(shape=[num_sample, self.dim]) + 0.01
         dw_sample = normal.rvs(size=[num_sample, self.dim, N])
         x_bdry = normal.rvs(size=[num_sample, self.dim])
@@ -71,7 +69,6 @@ class Equation(object):
             flag = flag * (1 - Exit)
         dt = np.ones([num_sample,N]) * delta_t
         return x_smp, dt, coef
-    
     
     def propagate_adapted(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the new scheme
@@ -118,9 +115,11 @@ class Equation(object):
         raise NotImplementedError
         
     def b_np(self, x): #num_sample * 1
+        """a function whose level set is the boundary, in numpy"""
         return np.sum(x**2, 1, keepdims=True) - (self.R ** 2)
     
     def b_tf(self, x): #num_sample * 1
+        """a function whose level set is the boundary, in tensorflow"""
         return tf.reduce_sum(x**2, 1, keepdims=True) - (self.R ** 2)
         
     def V_true(self, x):
