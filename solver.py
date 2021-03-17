@@ -70,8 +70,7 @@ class ActorCriticSolver(object):
                 grad_y = self.model_critic.NN_value_grad(x0, training=False, need_grad=False)
                 z = self.model_actor.NN_control(x0, training=False, need_grad=False)
                 true_z = self.bsde.u_true(x0)
-                print("true loss actor: ", true_loss_actor)
-                training_history.append([0, 0.0, true_loss_actor, 0.0, 0.0, 0.0, 0.0, 0.0, elapsed_time])
+                logging.info("true loss actor: %.4e" % true_loss_actor)
             if self.train_config.train == "actor-critic" or self.train_config.train == "critic":
                 self.train_step_critic(
                     self.sample(self.net_config.batch_size, self.eqn_config.num_time_interval_critic)
