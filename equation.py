@@ -228,7 +228,7 @@ class VDP(Equation):
     def diffusion(self, x, dw):
         return self.sigma * dw
 
-class ekn(Equation):
+class EKN(Equation):
     """Diffusive Eikonal equation"""
     def __init__(self, eqn_config):
         super(ekn, self).__init__(eqn_config)
