@@ -5,9 +5,9 @@ Run the following command to solve the HJB equation directly:
 python main.py --config_path=configs/lqr_d5.json
 ```
 **Names of config files**:
-"Lqr" denotes the linear quadratic regulator;
-"Vdp" denotes the stochastic Van Der Pol oscilator;
-"Ekn" denotes the diffusive Eikonal equation.
+"lqr" denotes the linear quadratic regulator;
+"vdp" denotes the stochastic Van Der Pol oscilator;
+"ekn" denotes the diffusive Eikonal equation.
 
 | Experiments in the paper                                     | Config names                                                 |
 |--------------------------------------------------------------|--------------------------------------------------------------|

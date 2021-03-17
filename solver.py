@@ -265,16 +265,16 @@ class ActorModel(tf.keras.Model):
 
 
 class DeepNN(tf.keras.Model):
-    def __init__(self, config, AC):
+    def __init__(self, config, out_type):
         super(DeepNN, self).__init__()
-        self.AC = AC
+        self.out_type = out_type
         self.eqn_config = config.eqn_config
         self.d = config.eqn_config.control_dim
         self.eqn = config.eqn_config.eqn_name
         dim = config.eqn_config.dim
-        if AC == "actor":
+        if out_type == "actor":
             num_hiddens = config.net_config.num_hiddens_actor
-        else: #AC == "critic" or "critic_grad"
+        else: # out_type == "critic" or "critic_grad"
             num_hiddens = config.net_config.num_hiddens_critic
         self.bn_layers = [
             tf.keras.layers.BatchNormalization(
@@ -288,11 +288,11 @@ class DeepNN(tf.keras.Model):
                                                    use_bias=False,
                                                    activation=None)
                              for i in range(len(num_hiddens))]
-        if AC == "critic":
+        if out_type == "critic":
             self.dense_layers.append(tf.keras.layers.Dense(1, activation=None))
-        elif AC == "critic_grad":
+        elif out_type == "critic_grad":
             self.dense_layers.append(tf.keras.layers.Dense(dim, activation=None))
-        elif AC == "actor" and self.eqn == "ekn":
+        elif out_type == "actor" and self.eqn == "EKN":
             self.dense_layers.append(tf.keras.layers.Dense(self.d+1, activation=None))
         else:
             self.dense_layers.append(tf.keras.layers.Dense(self.d, activation=None))
@@ -300,7 +300,7 @@ class DeepNN(tf.keras.Model):
     def call(self, x, training, need_grad):
         """structure: bn -> (dense -> bn -> relu) * len(num_hiddens) -> dense -> bn"""
         with tf.GradientTape() as g:
-            if self.AC == "critic" and need_grad:
+            if self.out_type == "critic" and need_grad:
                 g.watch(x)
             y = self.bn_layers[0](x, training)
             for i in range(len(self.dense_layers) - 1):
@@ -309,10 +309,10 @@ class DeepNN(tf.keras.Model):
                 y = y + tf.nn.relu(y)
             y = self.dense_layers[-1](y)
             y = self.bn_layers[-1](y, training)
-            if self.AC == "actor" and self.eqn == "ekn":
+            if self.out_type == "actor" and self.eqn == "EKN":
                 norm_y = tf.reduce_sum(y[:,0:self.d]**2, axis=1, keepdims=True)**0.5
                 y = y[:,0:self.d] / (0.000000000000001 + tf.nn.relu(y[:,self.d:self.d+1]) + norm_y)
-        if self.AC == "critic" and need_grad:
+        if self.out_type == "critic" and need_grad:
             return y, g.gradient(y, x)
         else:
             return y
