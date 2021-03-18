@@ -231,7 +231,7 @@ class VDP(Equation):
 class EKN(Equation):
     """Diffusive Eikonal equation"""
     def __init__(self, eqn_config):
-        super(ekn, self).__init__(eqn_config)
+        super(EKN, self).__init__(eqn_config)
         self.a2 = eqn_config.a2
         self.a3 = eqn_config.a3
         self.epsl = 1/2/self.a2/self.dim
