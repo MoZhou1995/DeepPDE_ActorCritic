@@ -12,11 +12,12 @@ from absl import flags
 from absl import logging as absl_logging
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/vdp_d4.json',
+flags.DEFINE_string('config_path', 'configs/lqr_var_d2.json',
                     """The path to load json file.""")
 flags.DEFINE_string('exp_name', None,
                     """The name of numerical experiments, prefix for logging""")

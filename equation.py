@@ -55,7 +55,7 @@ class Equation(object):
                 u_i = self.u_true(x_i)
             else:
                 u_i = NN_control(x_i, training, need_grad=False)
-            delta_x = self.drift(x_i, u_i) * delta_t + self.diffusion(x_i, dw_sample[:, :, i]) * sqrt_delta_t
+            delta_x = self.drift(x_i, u_i) * delta_t + self.diffusion(x_i, u_i, dw_sample[:, :, i], num_sample) * sqrt_delta_t
             x_iPlus1_temp = x_i + delta_x
             Exit = self.b_tf(x_iPlus1_temp) #Exit>=0 means out
             Exit = tf.reshape(tf.math.ceil((tf.math.sign(Exit)+1)/2), [num_sample]) #1 for Exit>=0, 0 for Exit<0
@@ -73,26 +73,25 @@ class Equation(object):
     def propagate_adaptive(self, num_sample, x0, dw_sample, NN_control, training, T, N, cheat):
         # the new scheme
         delta_t = T / N
-        sqrt_delta_t = np.sqrt(delta_t)
         x_smp = tf.reshape(x0, [num_sample, self.dim, 1])
         x_i = x0
         x0_norm = tf.sqrt(tf.reduce_sum(x0**2,1))
         #temp: 2 for inside (inner); 0 (and 1) for boundary layer; -2 (and -1) for outside
-        temp = tf.sign(self.R - x0_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm)
+        temp = tf.sign(self.R - x0_norm - self.sigma_Up*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x0_norm)
         #flag: 2 for inside; 1 means step size need modification; 0 means boundary, but we will move for at least a first step.
         flag = np.ones([num_sample]) + tf.math.floor(temp/2)
         for i in range(N):
             xi_norm = tf.sqrt(tf.reduce_sum(x_i**2,1))
-            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3 * self.dim * self.sigma**2) + (flag**2 - 2*flag + 1) * delta_t
+            dt_i = (2*flag - (flag**2)) * ((self.R - xi_norm)**2) / (3 * self.dim * self.sigma_Up**2) + (flag**2 - 2*flag + 1) * delta_t
             dt_i = tf.maximum(dt_i, delta_t*1e-4)
             if cheat:
                 u_i = self.u_true(x_i)
             else:
                 u_i = NN_control(x_i, training, need_grad=False)
-            delta_x = self.drift(x_i, u_i) * tf.reshape(dt_i, [num_sample,1]) + self.diffusion(x_i, dw_sample[:, :, i]) * tf.reshape(tf.sqrt(dt_i), [num_sample,1])
+            delta_x = self.drift(x_i, u_i) * tf.reshape(dt_i, [num_sample,1]) + self.diffusion(x_i, u_i, dw_sample[:, :, i], num_sample) * tf.reshape(tf.sqrt(dt_i), [num_sample,1])
             x_iPlus1_temp = x_i + delta_x
             x_iPlus1_temp_norm = tf.sqrt(tf.reduce_sum(x_iPlus1_temp**2,1,keepdims=False))
-            temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm)
+            temp = tf.sign(self.R - x_iPlus1_temp_norm - self.sigma_Up*np.sqrt(3 * self.dim * delta_t)) + tf.sign(self.R - x_iPlus1_temp_norm)
             new_flag = (np.ones([num_sample]) + tf.math.floor(temp/2)) * tf.sign(flag)
             coef_i = tf.sign(flag) * tf.sign(new_flag)
             if i==0:
@@ -130,11 +129,15 @@ class Equation(object):
         """Optimal control"""
         raise NotImplementedError
         
+    def sigma(self, x, u, num_sample): #num_sample x dim x dim_w
+        """diffusion coefficient"""
+        raise NotImplementedError
+        
     def drift(self, x, u):
         """drift in the SDE"""
         raise NotImplementedError
     
-    def diffusion(self, x):
+    def diffusion(self, x, u, dw, num_sample):
         """diffusion in the SDE"""
         raise NotImplementedError
 
@@ -142,12 +145,12 @@ class LQR(Equation):
     """linear quadratic regulator"""
     def __init__(self, eqn_config):
         super(LQR, self).__init__(eqn_config)
-        self.sigma = np.sqrt(2.0)
         self.p = eqn_config.p
         self.q = eqn_config.q
         self.beta = eqn_config.beta
         self.k = ( ((self.gamma**2) * (self.q**2) + 4 * self.p * self.q * (self.beta**2))**0.5 - self.q*self.gamma )/ (self.beta**2) / 2
-    
+        self.sigma_Up = np.sqrt(2.0) #upper bound for sigma
+        
     def w_tf(self, x, u): #num_sample * 1
         return tf.reduce_sum(self.p * tf.square(x) + self.q * tf.square(u), 1, keepdims=True) - 2*self.k*self.dim
 
@@ -163,21 +166,24 @@ class LQR(Equation):
     def V_grad_true(self, x): #num_sample * dim
         return 2 * self.k * x
     
+    def sigma(self, x, u, num_sample): # x is num_sample x dim, u is num_sample x dim_u, sigma is num_sample x dim x dim_w
+        return np.sqrt(2.0) * np.ones([num_sample,1,1]) * np.identity(self.dim)
+    
     def drift(self, x, u):
         return self.beta * u
     
-    def diffusion(self, x, dw):
-        return self.sigma * dw
+    def diffusion(self, x, u, dw, num_sample): #sigma num_sample x dim x dim_w, dw is num_sample x dim_w
+        return tf.linalg.matvec(self.sigma(x, u, num_sample), dw) # num_sample x dim
     
     
 class VDP(Equation):
     """Van Der Pol oscillator"""
     def __init__(self, eqn_config):
         super(VDP, self).__init__(eqn_config)
-        self.sigma = np.sqrt(2.0)
         self.a = eqn_config.a
         self.epsl = eqn_config.epsilon
         self.q = eqn_config.q
+        self.sigma_Up = np.sqrt(2.0) #upper bound for sigma
     
     def w_tf(self, x, u): #num_sample * 1
         d = self.control_dim # dim/2
@@ -220,22 +226,25 @@ class VDP(Equation):
         nx2 = tf.concat([x2[:,d-1:d],x2[:,0:d-1]],1)
         return tf.concat([2*self.a*x1 - self.epsl*(px1+nx1), 2*self.a*x2 - self.epsl*(px2+nx2)],axis=1)
     
+    def sigma(self, x, u, num_sample): # x is num_sample x dim, u is num_sample x dim_u, sigma is num_sample x dim x dim_w
+        return np.sqrt(2.0) * np.ones([num_sample,1,1]) * np.identity(self.dim)
+    
     def drift(self, x, u):
         x_1 = x[:,0:self.control_dim] #num_sample * d
         x_2 = x[:,self.control_dim:self.dim]
         return tf.concat([x_2, (1 - x_1**2)*x_2 - x_1 + u],axis=1)
     
-    def diffusion(self, x, dw):
-        return self.sigma * dw
+    def diffusion(self, x, u, dw, num_sample): #sigma num_sample x dim x dim_w, dw is num_sample x dim_w
+        return tf.linalg.matvec(self.sigma(x, u, num_sample), dw) # num_sample x dim
 
-class EKN(Equation):
+class ekn(Equation):
     """Diffusive Eikonal equation"""
     def __init__(self, eqn_config):
-        super(EKN, self).__init__(eqn_config)
+        super(ekn, self).__init__(eqn_config)
         self.a2 = eqn_config.a2
         self.a3 = eqn_config.a3
         self.epsl = 1/2/self.a2/self.dim
-        self.sigma = np.sqrt(self.epsl) * np.sqrt(2.0)
+        self.sigma_Up = np.sqrt(2.0) #upper bound for sigma
 
     def w_tf(self, x, u): #num_sample * 1
         return 0*tf.reduce_sum(x, 1, keepdims=True) + 1
@@ -255,10 +264,49 @@ class EKN(Equation):
         x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
         return (3*self.a3*x_norm - 2*self.a2) * x
     
+    def sigma(self, x, u, num_sample): # x is num_sample x dim, u is num_sample x dim_u, sigma is num_sample x dim x dim_w
+        return np.sqrt(2.0) * np.ones([num_sample,1,1]) * np.identity(self.dim)
+    
     def drift(self, x, u):
         x_norm = tf.reduce_sum(x**2, axis=1, keepdims=True)**0.5
         c = 3 * (self.dim+1) * self.a3 / 2/self.a2 / self.dim / (2*self.a2 - 3*self.a3*x_norm)
         return c * u
     
-    def diffusion(self, x, dw):
-        return self.sigma * dw
+    def diffusion(self, x, u, dw, num_sample): #sigma num_sample x dim x dim_w, dw is num_sample x dim_w
+        return tf.linalg.matvec(self.sigma(x, u, num_sample), dw) # num_sample x dim
+
+class LQR_var(Equation):
+    """linear quadratic regulator"""
+    def __init__(self, eqn_config):
+        super(LQR_var, self).__init__(eqn_config)
+        #self.k = eqn_config.k
+        self.k = (np.sqrt(5)-1)/2
+        self.q = eqn_config.q
+        self.beta = eqn_config.beta
+        self.epsilon = eqn_config.epsilon
+        self.sigma_Up = np.sqrt(2.0) #upper bound for sigma
+    
+    def w_tf(self, x, u): #num_sample * 1
+        temp = tf.reduce_sum(self.k**2 * (self.beta + 2*self.epsilon)**2 * x**2 / (self.q + 2*self.k * self.epsilon**2 * x**2), 1, keepdims=True)
+        return temp + tf.reduce_sum(self.gamma * self.k * tf.square(x) + self.q * tf.square(u), 1, keepdims=True) - 2*self.k*self.dim
+
+    def Z_tf(self, x): #num_sample * 1
+        return 0 * tf.reduce_sum(x, 1, keepdims=True) + self.k * (self.R ** 2)
+
+    def V_true(self, x): #num_sample * 1
+        return tf.reduce_sum(tf.square(x), 1, keepdims=True) * self.k
+
+    def u_true(self, x): #num_sample * dim
+        return - (self.beta + 2 * self.epsilon) * x / (self.q / self.k + 2 * self.epsilon**2 * x**2)
+    
+    def V_grad_true(self, x): #num_sample * dim
+        return 2 * self.k * x
+    
+    def sigma(self, x, u, num_sample): # x is num_sample x dim, u is num_sample x dim_u, sigma is num_sample x dim x dim_w
+        return np.sqrt(2.0) * tf.linalg.diag(1 + self.epsilon * x * u)
+    
+    def drift(self, x, u):
+        return self.beta * u
+    
+    def diffusion(self, x, u, dw, num_sample): #sigma num_sample x dim x dim_w, dw is num_sample x dim_w
+        return tf.linalg.matvec(self.sigma(x, u, num_sample), dw) # num_sample x dim
