@@ -279,8 +279,8 @@ class LQR_var(Equation):
     """linear quadratic regulator"""
     def __init__(self, eqn_config):
         super(LQR_var, self).__init__(eqn_config)
-        #self.k = eqn_config.k
-        self.k = (np.sqrt(5)-1)/2
+        self.k = eqn_config.k
+        # self.k = (np.sqrt(5)-1)/2
         self.q = eqn_config.q
         self.beta = eqn_config.beta
         self.epsilon = eqn_config.epsilon
