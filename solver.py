@@ -51,7 +51,7 @@ class ActorCriticSolver(object):
                 err_value_infty = self.err_value_infty(valid_data_critic).numpy()
                 err_cost = self.err_cost(valid_data_cost).numpy()
                 elapsed_time = time.time() - start_time
-                training_history.append([step, loss_critic, loss_actor, err_value_infty, err_value, err_control, err_value_grad, err_cost, elapsed_time])
+                training_history.append([step, loss_critic, loss_actor, err_value, err_value_infty, err_control, err_value_grad, err_cost, elapsed_time])
                 if self.net_config.verbose:
                     logging.info("step: %5u, loss_critic: %.4e, loss_actor: %.4e, err_value: %.4e, err_value_infty: %.4e, err_control: %.4e, err_value_grad: %.4e, err_cost: %.4e, elapsed time: %3u" % (
                         step, loss_critic, loss_actor, err_value, err_value_infty, err_control, err_value_grad, err_cost, elapsed_time))
