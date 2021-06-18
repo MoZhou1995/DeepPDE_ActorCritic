@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 import equation as eqn
 from solver import ActorCriticSolver
 
-flags.DEFINE_string('config_path', 'configs/lqr_var_d20.json',
+flags.DEFINE_string('config_path', 'configs/lqr_d5.json',
                     """The path to load json file.""")
 flags.DEFINE_string('exp_name', None,
                     """The name of numerical experiments, prefix for logging""")
@@ -50,19 +50,22 @@ def main(argv):
 
     absl_logging.get_absl_handler().setFormatter(logging.Formatter('%(levelname)-6s %(message)s'))
     absl_logging.set_verbosity('info')
-    # for T in [0.025, 0.05, 0.1, 0.2, 0.4, 0.8]:
-    #     config.eqn_config.total_time_critic = T
-    #     config.eqn_config.total_time_actor = T
-    for ep in [-0.1, -0.01, 0.0, 0.01, 0.1]:
-        config.eqn_config.epsilon = ep
-        
+    for T in [0.04, 0.1, 0.2, 0.4, 0.8]:
+        config.eqn_config.total_time_critic = T
+        config.eqn_config.total_time_actor = T
+        N = int(T*250)
+        config.eqn_config.num_time_interval_critic = N
+        config.eqn_config.num_time_interval_actor = N
+        # for ep in [-0.1, -0.01, 0.0, 0.01, 0.1]:
+        #     config.eqn_config.epsilon = ep
+            
         logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
         ActorCritic_solver = ActorCriticSolver(config, bsde)
         training_history,x,y, true_y, z, true_z, grad_y = ActorCritic_solver.train()
         
-        epsl = config.eqn_config.epsilon
-        char = "epsl" + str(epsl)
-        # char = "T" + str(T)
+        # epsl = config.eqn_config.epsilon
+        # char = "epsl" + str(epsl)
+        char = "T" + str(T) + "N" + str(N)
         # char = sample+"_"+scheme+"_"+TD+"_"+train
         np.savetxt('{}_{}.csv'.format(path_prefix,char),
                    training_history,
