@@ -9,7 +9,6 @@
     "num_time_interval_critic": 100,
     "num_time_interval_actor": 100,
     "discount": 1.0,
-    "k": 1.0,
     "q": 1.0,
     "beta": 1.0,
     "epsilon": 0.01,
