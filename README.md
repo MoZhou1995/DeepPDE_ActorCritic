@@ -7,13 +7,15 @@ python main.py --config_path=configs/lqr_d5.json
 **Names of config files**:
 "lqr" denotes the linear quadratic regulator;
 "vdp" denotes the stochastic Van Der Pol oscilator;
-"ekn" denotes the diffusive Eikonal equation.
+"ekn" denotes the diffusive Eikonal equation;
+"lqr_var" denotes the linear quadratic regulator with a non-constant diffusion coefficient.
 
 | Experiments in the paper                                     | Config names                                                 |
 |--------------------------------------------------------------|--------------------------------------------------------------|
 | Linear quadratic regulator (Figure 2)                        | lqr_d5.json, lqr_d10.json, lqr_d20.json                      |
-| Stochastic Van Der Pol oscilator (Figure 3)                  | vdp_d5.json, vdp_d10.json, vdp_d20.json                      |
+| Stochastic Van Der Pol oscilator (Figure 3)                  | vdp_d4.json, vdp_d10.json, vdp_d20.json                      |
 | Diffusive Eikonal equation (Figure 4)                        | ekn_d5.json, ekn_d10.json, ekn_d20.json                      |
+| Linear quadratic regulator with non-constant diffusion       | lqr_var_d5.json, lqr_var_d10.json, lqr_var_d20.json          |
 
 **Fileds in config files**
 "sample": "normal" means sampling Brownian increments with normal distribution and "bounded" means bounded sample.
