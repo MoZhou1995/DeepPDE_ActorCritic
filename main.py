@@ -50,16 +50,12 @@ def main(argv):
 
     absl_logging.get_absl_handler().setFormatter(logging.Formatter('%(levelname)-6s %(message)s'))
     absl_logging.set_verbosity('info')
-    
             
     logging.info('Begin to solve %s ' % config.eqn_config.eqn_name)
-    config.eqn_config.total_time_critic = 0.04
-    config.eqn_config.total_time_actor = 0.04
     ActorCritic_solver = ActorCriticSolver(config, bsde)
     training_history,x,y, true_y, z, true_z, grad_y = ActorCritic_solver.train()
     
-    
-    char = "T0.04"
+    char = sample+"_"+scheme+"_"+TD+"_"+train
     np.savetxt('{}_{}.csv'.format(path_prefix,char),
                training_history,
                fmt=['%d', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%.5e', '%d'],
